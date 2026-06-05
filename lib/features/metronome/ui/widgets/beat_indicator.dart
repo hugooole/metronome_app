@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-/// 拍点视觉指示：一排圆点，当前拍高亮，第一拍（强拍）用强调色。
+/// Visual beat indicator: a row of dots, the current beat highlighted, the
+/// first beat (accent) using the accent color.
 class BeatIndicator extends StatelessWidget {
   final int beatsPerBar;
   final int currentBeat;

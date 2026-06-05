@@ -1,18 +1,19 @@
-/// Tap Tempo：连续敲击算出 BPM。
+/// Tap Tempo: derive BPM from repeated taps.
 ///
-/// 纯逻辑，无 UI 依赖，便于测试。
-/// 算法：记录最近若干次敲击时刻，取相邻间隔的平均值换算 BPM。
-/// 超过 [resetGap] 没敲，视为重新开始一组。
+/// Pure logic, no UI dependency, easy to test.
+/// Algorithm: record the most recent tap times and convert the average of
+/// adjacent intervals into BPM. If no tap occurs within [resetGap], start a new
+/// group.
 library;
 
 const int _kMinBpm = 30;
 const int _kMaxBpm = 300;
 
 class TapTempoCalculator {
-  /// 最多参与平均的间隔数（取最近的几次，更跟手）。
+  /// Max number of intervals to average (the most recent ones, more responsive).
   final int maxIntervals;
 
-  /// 两次敲击超过此间隔则重置。
+  /// Reset if two taps are farther apart than this.
   final Duration resetGap;
 
   final List<DateTime> _taps = [];
@@ -22,14 +23,15 @@ class TapTempoCalculator {
     this.resetGap = const Duration(seconds: 2),
   });
 
-  /// 记录一次敲击，返回当前估算的 BPM；不足两次返回 null。
+  /// Record a tap and return the current BPM estimate; null if fewer than two
+  /// taps.
   int? tap(DateTime now) {
     if (_taps.isNotEmpty && now.difference(_taps.last) > resetGap) {
       _taps.clear();
     }
     _taps.add(now);
 
-    // 只保留最近 maxIntervals+1 个时刻。
+    // Keep only the most recent maxIntervals+1 timestamps.
     while (_taps.length > maxIntervals + 1) {
       _taps.removeAt(0);
     }

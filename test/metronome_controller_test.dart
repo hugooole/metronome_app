@@ -5,7 +5,7 @@ import 'package:metronome_app/core/timing/local_metronome_engine.dart';
 import 'package:metronome_app/features/metronome/state/metronome_controller.dart';
 import 'package:metronome_app/data/settings_repository.dart';
 
-/// 假播放器：记录调用次数，不发真声。
+/// Fake player: records call counts, produces no real sound.
 class FakeClickPlayer implements ClickPlayer {
   int accentCount = 0;
   int normalCount = 0;
@@ -19,7 +19,7 @@ class FakeClickPlayer implements ClickPlayer {
   void dispose() {}
 }
 
-/// 内存设置仓库。
+/// In-memory settings repository.
 class FakeSettings implements SettingsRepository {
   MetronomeSettings stored;
   FakeSettings([this.stored = MetronomeSettings.defaults]);
@@ -31,7 +31,7 @@ class FakeSettings implements SettingsRepository {
 
 void main() {
   group('MetronomeController', () {
-    test('init 恢复已保存的设置', () async {
+    test('init restores saved settings', () async {
       final c = MetronomeController(
         player: FakeClickPlayer(),
         settings: FakeSettings(
@@ -43,7 +43,7 @@ void main() {
       expect(c.beatsPerBar, 3);
     });
 
-    test('setBpm 夹到合法范围并持久化', () async {
+    test('setBpm clamps to the valid range and persists', () async {
       final settings = FakeSettings();
       final c = MetronomeController(
         player: FakeClickPlayer(),
@@ -57,7 +57,7 @@ void main() {
       expect(c.bpm, kMinBpm);
     });
 
-    test('播放时强拍调 playAccent，弱拍调 playNormal', () {
+    test('accent calls playAccent and normal beats call playNormal', () {
       final player = FakeClickPlayer();
       final c = MetronomeController(
         player: player,
@@ -68,15 +68,15 @@ void main() {
       );
       fakeAsync((async) {
         c.start();
-        async.elapse(const Duration(milliseconds: 2100)); // ~5 拍
+        async.elapse(const Duration(milliseconds: 2100)); // ~5 beats
         c.stop();
       });
-      // 5 拍里强拍出现至少 1 次（第1、5拍），弱拍多次。
+      // Across 5 beats the accent fires at least once (beats 1 and 5); normal beats fire multiple times.
       expect(player.accentCount, greaterThanOrEqualTo(1));
       expect(player.normalCount, greaterThanOrEqualTo(3));
     });
 
-    test('stop 后 isPlaying 为 false 且 currentBeat 复位', () {
+    test('after stop, isPlaying is false and currentBeat resets', () {
       final c = MetronomeController(
         player: FakeClickPlayer(),
         settings: FakeSettings(),

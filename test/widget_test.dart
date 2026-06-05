@@ -24,7 +24,8 @@ class _FakeSettings implements SettingsRepository {
 }
 
 void main() {
-  testWidgets('主界面渲染 BPM 与开始按钮，点击切换为停止', (tester) async {
+  testWidgets('main screen renders BPM and start button, tap toggles to stop',
+      (tester) async {
     final controller = MetronomeController(
       player: _FakePlayer(),
       settings: _FakeSettings(),
@@ -35,12 +36,12 @@ void main() {
       MaterialApp(home: MetronomeScreen(controller: controller)),
     );
 
-    // 默认 120 BPM 显示。
+    // Default 120 BPM is shown.
     expect(find.text('120'), findsOneWidget);
     expect(find.text('BPM'), findsOneWidget);
     expect(find.text('开始'), findsOneWidget);
 
-    // 点击开始 → 变停止。
+    // Tap start -> becomes stop.
     await tester.tap(find.text('开始'));
     await tester.pump();
     expect(find.text('停止'), findsOneWidget);

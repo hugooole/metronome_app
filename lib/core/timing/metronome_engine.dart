@@ -1,23 +1,28 @@
-/// 节拍器计时引擎 —— 公共类型与抽象接口。
+/// Metronome timing engine — shared types and abstract interface.
 ///
-/// 核心设计：自校正调度，消除累积漂移。
-///   维护「理论拍点时间」每拍 `+= interval`，而非基于实际触发时刻重置基准。
-///   即使某次检查晚了几毫秒，下一拍的理论时间不受影响，误差不累积。
+/// Core design: self-correcting scheduling that eliminates cumulative drift.
+///   Keeps a "theoretical beat time" that advances by `+= interval`, rather
+///   than resetting the baseline to the actual fire time. Even if a check is a
+///   few milliseconds late, the next beat's theoretical time is unaffected, so
+///   error does not accumulate.
 ///
-/// 两个实现：
-///   - [LocalMetronomeEngine]：同进程，用可注入时钟，便于 fakeAsync 精确测试。
-///   - [IsolateMetronomeEngine]：独立 Isolate，主线程卡顿不影响节拍，用于生产。
+/// Two implementations:
+///   - [LocalMetronomeEngine]: same-isolate, uses an injectable clock for
+///     precise fakeAsync testing.
+///   - [IsolateMetronomeEngine]: dedicated Isolate so main-thread stalls don't
+///     affect the beat; used in production.
 library;
 
-/// 一次拍点事件。
+/// A single beat event.
 class BeatEvent {
-  /// 0-based，当前是小节内第几拍。
+  /// 0-based index of the beat within the bar.
   final int beatIndex;
 
-  /// 是否为强拍（小节第一拍）。
+  /// Whether this is the accent (first beat of the bar).
   final bool isAccent;
 
-  /// 该拍的理论触发时刻（相对引擎启动的微秒数），用于精度测量。
+  /// Theoretical fire time of this beat (microseconds since engine start),
+  /// used for precision measurement.
   final int scheduledMicros;
 
   const BeatEvent({
@@ -27,14 +32,15 @@ class BeatEvent {
   });
 }
 
-/// 计时引擎配置。所有字段不可变，改参数请用 [copyWith] 生成新实例。
+/// Timing engine configuration. All fields are immutable; use [copyWith] to
+/// produce a new instance with changes.
 class MetronomeConfig {
   final int bpm;
   final int beatsPerBar;
 
   const MetronomeConfig({this.bpm = 120, this.beatsPerBar = 4});
 
-  /// 一拍的时长（微秒）。
+  /// Duration of one beat in microseconds.
   int get beatIntervalMicros => (60 * 1000 * 1000) ~/ bpm;
 
   MetronomeConfig copyWith({int? bpm, int? beatsPerBar}) => MetronomeConfig(
@@ -43,9 +49,10 @@ class MetronomeConfig {
       );
 }
 
-/// 计时引擎抽象接口。状态层只依赖它，可在测试/生产间切换实现。
+/// Abstract timing engine interface. The state layer depends only on this, so
+/// implementations can be swapped between test and production.
 abstract class MetronomeEngine {
-  /// 拍点回调。可在构造后替换。
+  /// Beat callback. Can be replaced after construction.
   set onBeatHandler(void Function(BeatEvent event) handler);
 
   bool get isRunning;
@@ -53,7 +60,7 @@ abstract class MetronomeEngine {
   void start();
   void stop();
 
-  /// 运行中更新配置（BPM / 拍号）。
+  /// Update configuration (BPM / time signature) while running.
   void updateConfig(MetronomeConfig config);
 
   void dispose();

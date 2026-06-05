@@ -1,16 +1,18 @@
-/// 在独立 Isolate 中运行的计时核心。
+/// The timing core that runs inside a dedicated Isolate.
 ///
-/// 为什么放进 Isolate：主 isolate 上的 UI 重绘、动画、GC 都会抢占事件循环，
-/// 让 Timer 回调延迟。把计时隔离出去，节拍就不受主线程卡顿影响。
+/// Why an Isolate: UI repaints, animations, and GC on the main isolate all
+/// preempt the event loop and delay Timer callbacks. Isolating the timing keeps
+/// the beat unaffected by main-thread stalls.
 ///
-/// 漂移处理沿用主实现的策略：理论拍点时间 `+= interval` 累加，
-/// 而非基于「实际触发时刻」重置基准——后者会累积误差（参考项目的缺陷）。
+/// Drift handling matches the main implementation: the theoretical beat time
+/// advances by `+= interval`, rather than resetting the baseline to the actual
+/// fire time (the latter accumulates error — a flaw in the reference project).
 library;
 
 import 'dart:async';
 import 'dart:isolate';
 
-/// 启动 Isolate 时传入的初始化参数。
+/// Initialization parameters passed when spawning the Isolate.
 class TimerInit {
   final SendPort toMain;
   final int bpm;
@@ -23,23 +25,24 @@ class TimerInit {
   });
 }
 
-/// 主 → Isolate 的配置更新消息。
+/// Main → Isolate config update message.
 class ConfigUpdate {
   final int bpm;
   final int beatsPerBar;
   const ConfigUpdate(this.bpm, this.beatsPerBar);
 }
 
-/// Isolate → 主 的一次拍点消息。用普通 List 传输，跨 isolate 开销最小。
-/// 格式: [beatIndex, isAccent(0/1), scheduledMicros]
+/// Isolate → main beat message. Sent as a plain List to minimize cross-isolate
+/// overhead. Format: [beatIndex, isAccent(0/1), scheduledMicros]
 typedef BeatMessage = List<int>;
 
-const int _kTickMicros = 2000; // 每 2ms 检查一次是否到点
+const int _kTickMicros = 2000; // check whether it's time every 2ms
 
-/// Isolate 入口。data 为 [TimerInit]。
+/// Isolate entry point. `data` is a [TimerInit].
 void timerIsolateEntry(TimerInit init) {
   final control = ReceivePort();
-  // 第一件事：把控制端口送回主 isolate，用于接收配置更新和停止信号。
+  // First thing: send the control port back to the main isolate so it can
+  // receive config updates and the stop signal.
   init.toMain.send(control.sendPort);
 
   int bpm = init.bpm;
@@ -47,7 +50,7 @@ void timerIsolateEntry(TimerInit init) {
 
   int beatInterval() => (60 * 1000 * 1000) ~/ bpm;
 
-  final clock = Stopwatch()..start(); // Isolate 内独占，无需可测试时钟
+  final clock = Stopwatch()..start(); // isolate-local; no need for a test clock
   int nextBeatMicros = 0;
   int nextBeatIndex = 0;
 
@@ -58,7 +61,7 @@ void timerIsolateEntry(TimerInit init) {
     while (now >= nextBeatMicros) {
       final isAccent = nextBeatIndex == 0;
       init.toMain.send(<int>[nextBeatIndex, isAccent ? 1 : 0, nextBeatMicros]);
-      nextBeatMicros += beatInterval(); // 理论时间累加 —— 零漂移
+      nextBeatMicros += beatInterval(); // theoretical time advances — no drift
       nextBeatIndex = (nextBeatIndex + 1) % beatsPerBar;
     }
   }

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../state/metronome_controller.dart';
 
-/// BPM 滑块 + ±1 / ±5 微调按钮。
+/// BPM slider + ±1 / ±5 fine-adjust buttons.
 class BpmControls extends StatelessWidget {
   final MetronomeController controller;
   const BpmControls({super.key, required this.controller});
@@ -57,7 +57,7 @@ class NudgeButton extends StatelessWidget {
   }
 }
 
-/// 拍号（每小节拍数）选择。
+/// Time signature (beats per bar) selector.
 class BeatsPerBarSelector extends StatelessWidget {
   final MetronomeController controller;
   const BeatsPerBarSelector({super.key, required this.controller});
@@ -74,7 +74,7 @@ class BeatsPerBarSelector extends StatelessWidget {
   }
 }
 
-/// 启动 / 停止主按钮。
+/// Start / stop primary button.
 class StartStopButton extends StatelessWidget {
   final MetronomeController controller;
   const StartStopButton({super.key, required this.controller});

@@ -1,43 +1,50 @@
-/// 节拍器发声层。
+/// Metronome sound layer.
 ///
-/// 对外暴露 [ClickPlayer] 抽象接口，状态层只依赖接口，不依赖 flutter_soloud。
-/// 好处：测试可注入假播放器；将来换音频库只改实现，不动上层。
+/// Exposes the [ClickPlayer] abstract interface so the state layer depends on
+/// the interface, not on flutter_soloud. Benefits: tests can inject a fake
+/// player; swapping the audio library later only changes the implementation,
+/// not the layers above.
 library;
 
 import 'package:flutter_soloud/flutter_soloud.dart';
 
-/// 节拍器发声接口。
+/// Metronome sound interface.
 abstract class ClickPlayer {
-  /// 加载音频资源，必须在播放前调用一次。
+  /// Load audio resources; must be called once before playing.
   Future<void> init();
 
-  /// 播放强拍（小节第一拍）。
+  /// Play the accent (first beat of the bar).
   void playAccent();
 
-  /// 播放弱拍。
+  /// Play a normal beat.
   void playNormal();
 
-  /// 释放资源。
+  /// Release resources.
   void dispose();
 }
 
-/// 基于 flutter_soloud 的实现。
+/// flutter_soloud-based implementation.
 ///
-/// 设计要点：
-/// - 只用一个 click 源（用户提供的 unfa 2kHz 脉冲，FLAC，约 50ms）。
-/// - 强拍/弱拍不靠两个素材文件，而靠**音量 + 播放速度（音高）**区分：
-///   强拍原速、满音量；弱拍提速（音调更高更短促）、略降音量。
-///   这样单文件即可清晰区分小节，避免素材不匹配。
-/// - click 很短，预加载为内存音源，播放零磁盘 IO，延迟最低。
-/// - 每次播放都是一次性 oneshot，不复用 handle，避免相互打断。
+/// Design notes:
+/// - Uses a single click source (the user-provided unfa 2kHz pulse, FLAC,
+///   ~50ms).
+/// - Accent vs. normal beats are distinguished not by two asset files but by
+///   **volume + playback speed (pitch)**: the accent plays at normal speed and
+///   full volume; the normal beat plays faster (higher-pitched, shorter) at
+///   slightly lower volume. This cleanly distinguishes bars from a single file
+///   and avoids mismatched assets.
+/// - The click is short, preloaded as an in-memory source, so playback has zero
+///   disk IO and minimal latency.
+/// - Each playback is a one-shot; handles are not reused, avoiding mutual
+///   interruption.
 class SoLoudClickPlayer implements ClickPlayer {
   static const String _clickAsset = 'assets/sounds/click.flac';
 
-  // 强弱拍的音量与音高（相对播放速度）差异。
+  // Volume and pitch (relative playback speed) differences for accent/normal.
   static const double _accentVolume = 1.0;
   static const double _normalVolume = 0.6;
   static const double _accentSpeed = 1.0;
-  static const double _normalSpeed = 1.5; // 弱拍音调更高，听感更"轻"
+  static const double _normalSpeed = 1.5; // higher pitch feels "lighter"
 
   final SoLoud _soloud = SoLoud.instance;
 
@@ -62,7 +69,8 @@ class SoLoudClickPlayer implements ClickPlayer {
   void _playClick(double volume, double speed) {
     final src = _click;
     if (!_ready || src == null) return;
-    // 先 paused 播放以便设置参数，再恢复——保证音量/音高在发声前生效。
+    // Start paused to set parameters, then resume — ensures volume/pitch take
+    // effect before any sound is produced.
     final handle = _soloud.play(src, volume: volume, paused: true);
     _soloud.setRelativePlaySpeed(handle, speed);
     _soloud.setPause(handle, false);

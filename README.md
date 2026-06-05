@@ -1,66 +1,66 @@
-# 节拍器 (Metronome)
+# Metronome
 
-一个用 Flutter 编写的跨平台节拍器练习 app，专注于**计时精度**。
+A cross-platform metronome practice app built with Flutter, focused on **timing precision**.
 
-## 功能
+## Features
 
-- **BPM 调节**：30–300，滑块 + ±1 / ±5 微调
-- **拍号**：2/4、3/4、4/4、6/8
-- **强弱拍重音**：每小节第一拍区分音色
-- **Tap Tempo**：连续敲击自动测算 BPM
-- **拍点视觉指示**：实时高亮当前拍，强拍突出
-- **设置记忆**：自动恢复上次的 BPM 与拍号
+- **BPM control**: 30–300, slider + ±1 / ±5 fine adjustment
+- **Time signatures**: 2/4, 3/4, 4/4, 6/8
+- **Accented downbeat**: the first beat of each bar has a distinct timbre
+- **Tap Tempo**: tap repeatedly to estimate BPM automatically
+- **Visual beat indicator**: highlights the current beat in real time, with the accent emphasized
+- **Settings memory**: restores the last BPM and time signature on launch
 
-## 设计要点
+## Design Notes
 
-### 零漂移计时
+### Drift-free timing
 
-节拍器的核心难点是计时精度。本项目**不**在定时器回调里直接发声（抖动大），而是采用**自校正调度**：维护「理论拍点时间」按 `+= interval` 累加，而非基于实际触发时刻重置基准。即使某次检查晚了几毫秒，下一拍的理论时间不受影响，误差不累积。
+The core challenge of a metronome is timing precision. This project does **not** play sound directly inside a timer callback (which jitters). Instead it uses **self-correcting scheduling**: it keeps a "theoretical beat time" that advances by `+= interval`, rather than resetting the baseline to the actual fire time. Even if one check is a few milliseconds late, the next beat's theoretical time is unaffected, so error does not accumulate.
 
-实测：120 BPM 跑 23 拍，总漂移仅 -2.31ms，单拍抖动 ≤2.23ms（含 Isolate→主线程通信开销）。
+Measured: at 120 BPM over 23 beats, total drift was only -2.31ms with per-beat jitter ≤2.23ms (including Isolate→main-thread communication overhead).
 
-### Isolate 隔离
+### Isolate isolation
 
-计时跑在独立 Isolate 中，主线程的 UI 重绘、动画、GC 不会干扰节拍。计时层做成抽象接口 + 双实现：
+Timing runs in a dedicated Isolate so the main thread's UI repaints, animations, and GC never interfere with the beat. The timing layer is an abstract interface with two implementations:
 
-- `LocalMetronomeEngine`：同进程，用可注入时钟，便于 `fakeAsync` 精确单测
-- `IsolateMetronomeEngine`：独立 Isolate，生产环境使用
+- `LocalMetronomeEngine`: same-isolate, uses an injectable clock for precise `fakeAsync` unit tests
+- `IsolateMetronomeEngine`: dedicated Isolate, used in production
 
-## 项目结构
+## Project Structure
 
 ```
 lib/
-├── main.dart                          入口，依赖注入
+├── main.dart                          entry point, dependency injection
 ├── core/
 │   ├── timing/
-│   │   ├── metronome_engine.dart      抽象接口 + BeatEvent/MetronomeConfig
-│   │   ├── local_metronome_engine.dart 同进程实现（可测试）
-│   │   ├── isolate_metronome_engine.dart Isolate 实现（生产）
-│   │   └── timer_isolate.dart         Isolate 内的计时核心
-│   └── audio/click_player.dart        SoLoud 发声层
+│   │   ├── metronome_engine.dart      abstract interface + BeatEvent/MetronomeConfig
+│   │   ├── local_metronome_engine.dart same-isolate implementation (testable)
+│   │   ├── isolate_metronome_engine.dart Isolate implementation (production)
+│   │   └── timer_isolate.dart         timing core that runs inside the Isolate
+│   └── audio/click_player.dart        SoLoud sound layer
 ├── features/metronome/
 │   ├── state/
-│   │   ├── metronome_controller.dart  状态粘合层（ChangeNotifier）
-│   │   └── tap_tempo.dart             Tap Tempo 算法
-│   └── ui/                            界面与组件
-└── data/settings_repository.dart      设置持久化
+│   │   ├── metronome_controller.dart  state glue layer (ChangeNotifier)
+│   │   └── tap_tempo.dart             Tap Tempo algorithm
+│   └── ui/                            screens and widgets
+└── data/settings_repository.dart      settings persistence
 ```
 
-## 技术栈
+## Tech Stack
 
 - Flutter 3.44.1 / Dart 3.12.1
-- [flutter_soloud](https://pub.dev/packages/flutter_soloud) — 低延迟音频
-- [shared_preferences](https://pub.dev/packages/shared_preferences) — 设置持久化
-- [clock](https://pub.dev/packages/clock) — 可注入时钟（测试用）
+- [flutter_soloud](https://pub.dev/packages/flutter_soloud) — low-latency audio
+- [shared_preferences](https://pub.dev/packages/shared_preferences) — settings persistence
+- [clock](https://pub.dev/packages/clock) — injectable clock (for tests)
 
-## 开发
+## Development
 
 ```bash
 flutter pub get
-flutter test          # 运行全部测试
-flutter run           # 在连接的设备/模拟器上运行
+flutter test          # run all tests
+flutter run           # run on a connected device/emulator
 ```
 
-## 致谢
+## Credits
 
-click 音效来自 [unfa](https://freesound.org/)（Freesound）。计时方案的 Isolate 隔离思路参考了 [reliable_interval_timer](https://github.com/inf0rmatix/reliable_interval_timer)。
+The click sound is by [unfa](https://freesound.org/) (Freesound). The Isolate-isolation approach for timing was inspired by [reliable_interval_timer](https://github.com/inf0rmatix/reliable_interval_timer).

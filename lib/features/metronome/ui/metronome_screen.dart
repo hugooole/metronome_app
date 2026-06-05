@@ -5,7 +5,7 @@ import '../state/tap_tempo.dart';
 import 'widgets/beat_indicator.dart';
 import 'widgets/bpm_controls.dart';
 
-/// 节拍器主界面。
+/// Metronome main screen.
 class MetronomeScreen extends StatefulWidget {
   final MetronomeController controller;
 

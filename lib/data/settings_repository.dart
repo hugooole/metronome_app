@@ -1,11 +1,12 @@
-/// 节拍器设置的持久化。
+/// Persistence for metronome settings.
 ///
-/// 用 shared_preferences 存最近一次的 BPM 和拍号，下次启动恢复。
+/// Uses shared_preferences to store the last BPM and time signature, restored
+/// on next launch.
 library;
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 不可变的设置快照。
+/// Immutable settings snapshot.
 class MetronomeSettings {
   final int bpm;
   final int beatsPerBar;
@@ -16,13 +17,13 @@ class MetronomeSettings {
       MetronomeSettings(bpm: 120, beatsPerBar: 4);
 }
 
-/// 设置仓库接口，便于测试注入假实现。
+/// Settings repository interface; allows injecting a fake in tests.
 abstract class SettingsRepository {
   Future<MetronomeSettings> load();
   Future<void> save(MetronomeSettings settings);
 }
 
-/// 基于 shared_preferences 的实现。
+/// shared_preferences-based implementation.
 class PrefsSettingsRepository implements SettingsRepository {
   static const _kBpm = 'metronome.bpm';
   static const _kBeatsPerBar = 'metronome.beatsPerBar';

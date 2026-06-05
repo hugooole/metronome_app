@@ -13,11 +13,12 @@ Future<void> main() async {
     settings: PrefsSettingsRepository(),
   );
 
-  // 加载音频与上次设置；失败也进入界面（无声仍可视觉练习）。
+  // Load audio and last settings; enter the UI even on failure (silent but
+  // still usable for visual practice).
   try {
     await controller.init();
   } catch (e, st) {
-    debugPrint('节拍器初始化失败: $e\n$st');
+    debugPrint('Metronome init failed: $e\n$st');
   }
 
   runApp(MetronomeApp(controller: controller));
