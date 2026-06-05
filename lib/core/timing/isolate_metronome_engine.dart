@@ -1,10 +1,13 @@
-/// 基于 Isolate 的计时引擎实现（生产用）。
+/// Isolate-based timing engine implementation (production).
 ///
-/// 计时跑在独立 Isolate（见 [timer_isolate.dart]），主线程的 UI 重绘、动画、
-/// GC 都不会干扰节拍。拍点通过 SendPort 回传主 isolate 后再发声与刷 UI。
+/// Timing runs in a dedicated Isolate (see [timer_isolate.dart]) so the main
+/// thread's UI repaints, animations, and GC don't interfere with the beat.
+/// Beats are sent back to the main isolate via SendPort, then trigger sound and
+/// UI updates.
 library;
 
-// 构造函数有意用命名参数 + 初始化列表（字段私有），可读性更好。
+// The constructor intentionally uses named params + an initializer list
+// (fields are private); this reads better than initializing formals.
 // ignore_for_file: prefer_initializing_formals
 
 import 'dart:async';
@@ -20,7 +23,7 @@ class IsolateMetronomeEngine implements MetronomeEngine {
   Isolate? _isolate;
   ReceivePort? _fromIsolate;
   StreamSubscription? _sub;
-  SendPort? _control; // 向 Isolate 发配置更新 / 停止
+  SendPort? _control; // sends config updates / stop to the Isolate
 
   IsolateMetronomeEngine({
     required void Function(BeatEvent event) onBeat,
@@ -38,7 +41,8 @@ class IsolateMetronomeEngine implements MetronomeEngine {
   @override
   void start() {
     if (isRunning) return;
-    // 异步拉起 Isolate；start() 本身保持同步签名以契合接口。
+    // Spawn the Isolate asynchronously; start() keeps a sync signature to match
+    // the interface.
     unawaited(_spawn());
   }
 
@@ -48,9 +52,9 @@ class IsolateMetronomeEngine implements MetronomeEngine {
 
     _sub = fromIsolate.listen((msg) {
       if (msg is SendPort) {
-        _control = msg; // Isolate 回传的控制端口
+        _control = msg; // control port sent back by the Isolate
       } else if (msg is List) {
-        // 拍点消息: [beatIndex, isAccent, scheduledMicros]
+        // Beat message: [beatIndex, isAccent, scheduledMicros]
         _onBeat(BeatEvent(
           beatIndex: msg[0] as int,
           isAccent: (msg[1] as int) == 1,

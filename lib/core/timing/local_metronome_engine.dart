@@ -1,10 +1,12 @@
-/// 同进程计时引擎实现。
+/// Same-isolate timing engine implementation.
 ///
-/// 用 `package:clock` 的可注入时钟（而非 Stopwatch），使 fakeAsync 能接管时间，
-/// 从而对零漂移调度做精确单元测试。生产环境用 [IsolateMetronomeEngine]。
+/// Uses `package:clock`'s injectable clock (instead of Stopwatch) so fakeAsync
+/// can take over time, enabling precise unit tests of the drift-free schedule.
+/// Production uses [IsolateMetronomeEngine].
 library;
 
-// 构造函数有意用命名参数 + 初始化列表（字段私有），可读性更好。
+// The constructor intentionally uses named params + an initializer list
+// (fields are private); this reads better than initializing formals.
 // ignore_for_file: prefer_initializing_formals
 
 import 'dart:async';
@@ -14,7 +16,8 @@ import 'package:clock/clock.dart';
 import 'metronome_engine.dart';
 
 class LocalMetronomeEngine implements MetronomeEngine {
-  /// 检查间隔。远小于拍间隔，保证「到点」判断足够及时。
+  /// Check interval. Much smaller than the beat interval so the "is it time
+  /// yet" decision is timely enough.
   static const Duration _tickInterval = Duration(milliseconds: 5);
 
   void Function(BeatEvent event) _onBeat;
@@ -42,7 +45,7 @@ class LocalMetronomeEngine implements MetronomeEngine {
   void start() {
     if (isRunning) return;
     _startTime = clock.now();
-    _nextBeatMicros = 0; // 第一拍立即发声
+    _nextBeatMicros = 0; // first beat fires immediately
     _nextBeatIndex = 0;
     _ticker = Timer.periodic(_tickInterval, (_) => _onTick());
   }
@@ -68,7 +71,8 @@ class LocalMetronomeEngine implements MetronomeEngine {
 
     final now = clock.now().difference(startTime).inMicroseconds;
 
-    // 一次 tick 内可能要补发多拍（极高 BPM 或主线程卡顿时）。
+    // A single tick may need to emit multiple beats (very high BPM or a
+    // main-thread stall).
     while (now >= _nextBeatMicros) {
       final beatIndex = _nextBeatIndex;
       _onBeat(BeatEvent(
@@ -76,7 +80,7 @@ class LocalMetronomeEngine implements MetronomeEngine {
         isAccent: beatIndex == 0,
         scheduledMicros: _nextBeatMicros,
       ));
-      // 理论时间按拍间隔累加 —— 漂移在此处被消除。
+      // Theoretical time advances by the beat interval — drift eliminated here.
       _nextBeatMicros += _config.beatIntervalMicros;
       _nextBeatIndex = (beatIndex + 1) % _config.beatsPerBar;
     }

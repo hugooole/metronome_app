@@ -5,23 +5,23 @@ import 'package:metronome_app/core/timing/metronome_engine.dart';
 
 void main() {
   group('MetronomeConfig', () {
-    test('beatIntervalMicros 按 BPM 正确换算', () {
+    test('beatIntervalMicros converts from BPM correctly', () {
       expect(const MetronomeConfig(bpm: 60).beatIntervalMicros, 1000000);
       expect(const MetronomeConfig(bpm: 120).beatIntervalMicros, 500000);
       expect(const MetronomeConfig(bpm: 240).beatIntervalMicros, 250000);
     });
 
-    test('copyWith 返回新实例且不改原值（不可变）', () {
+    test('copyWith returns a new instance without mutating the original', () {
       const a = MetronomeConfig(bpm: 120, beatsPerBar: 4);
       final b = a.copyWith(bpm: 90);
-      expect(a.bpm, 120); // 原值不变
+      expect(a.bpm, 120); // original unchanged
       expect(b.bpm, 90);
-      expect(b.beatsPerBar, 4); // 未改字段沿用
+      expect(b.beatsPerBar, 4); // unchanged field carried over
     });
   });
 
-  group('MetronomeEngine 拍点逻辑', () {
-    test('强拍落在每小节第一拍', () {
+  group('MetronomeEngine beat logic', () {
+    test('accent falls on the first beat of each bar', () {
       final events = <BeatEvent>[];
       final engine = LocalMetronomeEngine(
         onBeat: events.add,
@@ -29,23 +29,24 @@ void main() {
       );
       addTearDown(engine.dispose);
 
-      // 手动模拟时钟推进，直接驱动内部逻辑做纯逻辑断言。
-      // 这里用真实计时在 fakeAsync 下验证序列。
+      // Advance the clock under fakeAsync to drive the internal logic and make
+      // pure-logic assertions on the beat sequence.
       fakeAsync((async) {
         engine.start();
-        async.elapse(const Duration(milliseconds: 2100)); // 约 4 拍多
+        async.elapse(const Duration(milliseconds: 2100)); // a bit over 4 beats
         engine.stop();
       });
 
       expect(events.length, greaterThanOrEqualTo(4));
-      expect(events[0].isAccent, isTrue); // 第 1 拍强
+      expect(events[0].isAccent, isTrue); // beat 1 is the accent
       expect(events[1].isAccent, isFalse);
-      expect(events[4].isAccent, isTrue); // 第 5 拍 = 下小节第 1 拍
+      expect(events[4].isAccent, isTrue); // beat 5 = first beat of next bar
       expect(events.map((e) => e.beatIndex).take(5).toList(),
           [0, 1, 2, 3, 0]);
     });
 
-    test('计时无累积漂移：理论拍点时间严格等间隔', () {
+    test('no cumulative drift: theoretical beat times are exactly equal',
+        () {
       final events = <BeatEvent>[];
       final engine = LocalMetronomeEngine(
         onBeat: events.add,
@@ -55,22 +56,22 @@ void main() {
 
       fakeAsync((async) {
         engine.start();
-        async.elapse(const Duration(seconds: 10)); // 120 BPM × 10s ≈ 20 拍
+        async.elapse(const Duration(seconds: 10)); // 120 BPM x 10s ~= 20 beats
         engine.stop();
       });
 
-      // 相邻理论拍点间隔必须恒等于 500000µs，零漂移。
+      // Adjacent theoretical intervals must be exactly 500000us — zero drift.
       for (var i = 1; i < events.length; i++) {
         final delta =
             events[i].scheduledMicros - events[i - 1].scheduledMicros;
         expect(delta, 500000,
-            reason: '第 $i 拍间隔应为 500ms，实际 $delta µs');
+            reason: 'beat $i interval should be 500ms, got $delta us');
       }
-      // 第 20 拍的累积时间 = 19 × 500ms，绝不因抖动偏移。
+      // The 20th beat's accumulated time = 19 x 500ms, never offset by jitter.
       expect(events[19].scheduledMicros, 19 * 500000);
     });
 
-    test('运行中改 BPM 影响后续拍间隔', () {
+    test('changing BPM while running affects subsequent intervals', () {
       final events = <BeatEvent>[];
       final engine = LocalMetronomeEngine(
         onBeat: events.add,
@@ -80,13 +81,13 @@ void main() {
 
       fakeAsync((async) {
         engine.start();
-        async.elapse(const Duration(milliseconds: 1100)); // ~3 拍 @120
+        async.elapse(const Duration(milliseconds: 1100)); // ~3 beats @120
         engine.updateConfig(const MetronomeConfig(bpm: 60));
-        async.elapse(const Duration(milliseconds: 2100)); // ~2 拍 @60
+        async.elapse(const Duration(milliseconds: 2100)); // ~2 beats @60
         engine.stop();
       });
 
-      // 改速后出现 1000ms 间隔。
+      // A 1000ms interval appears after the tempo change.
       final deltas = <int>[];
       for (var i = 1; i < events.length; i++) {
         deltas.add(events[i].scheduledMicros - events[i - 1].scheduledMicros);
@@ -94,7 +95,7 @@ void main() {
       expect(deltas, contains(1000000));
     });
 
-    test('stop 后不再发拍', () {
+    test('no beats emitted after stop', () {
       final events = <BeatEvent>[];
       final engine = LocalMetronomeEngine(onBeat: events.add);
       addTearDown(engine.dispose);

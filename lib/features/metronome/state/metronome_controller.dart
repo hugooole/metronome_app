@@ -1,10 +1,13 @@
-/// 节拍器状态与控制层。
+/// Metronome state and control layer.
 ///
-/// 把计时引擎、发声层、UI 状态粘合起来。UI 只跟这一层打交道。
-/// 用 ChangeNotifier 而非 Riverpod：MVP 状态简单，少一层依赖，更易测。
+/// Glues together the timing engine, sound layer, and UI state. The UI talks
+/// only to this layer. Uses ChangeNotifier instead of Riverpod: the MVP state
+/// is simple, one less dependency, and easier to test.
 library;
 
-// 构造函数有意用命名参数 + 初始化列表（字段私有，engine 需回退构造），可读性更好。
+// The constructor intentionally uses named params + an initializer list
+// (fields are private, and engine needs a fallback construction); this reads
+// better than initializing formals.
 // ignore_for_file: prefer_initializing_formals
 
 import 'package:flutter/foundation.dart';
@@ -14,11 +17,11 @@ import '../../../core/timing/isolate_metronome_engine.dart';
 import '../../../core/timing/metronome_engine.dart';
 import '../../../data/settings_repository.dart';
 
-/// BPM 允许范围。
+/// Allowed BPM range.
 const int kMinBpm = 30;
 const int kMaxBpm = 300;
 
-/// 常用拍号（每小节拍数）。
+/// Common time signatures (beats per bar).
 const List<int> kBeatsPerBarOptions = [2, 3, 4, 6];
 
 class MetronomeController extends ChangeNotifier {
@@ -30,7 +33,7 @@ class MetronomeController extends ChangeNotifier {
   int _beatsPerBar = 4;
   bool _isPlaying = false;
 
-  /// 当前高亮的拍（-1 表示未播放）。
+  /// Currently highlighted beat (-1 means not playing).
   int _currentBeat = -1;
 
   MetronomeController({
@@ -48,7 +51,7 @@ class MetronomeController extends ChangeNotifier {
   bool get isPlaying => _isPlaying;
   int get currentBeat => _currentBeat;
 
-  /// 启动时调用：加载音频 + 恢复上次设置。
+  /// Called on startup: load audio + restore last settings.
   Future<void> init() async {
     await _player.init();
     final saved = await _settings.load();
@@ -88,7 +91,7 @@ class MetronomeController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 设置 BPM（自动夹到合法范围），持久化。
+  /// Set BPM (clamped to the allowed range) and persist it.
   void setBpm(int value) {
     final clamped = value.clamp(kMinBpm, kMaxBpm);
     if (clamped == _bpm) return;
