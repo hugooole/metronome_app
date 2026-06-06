@@ -8,6 +8,8 @@ library;
 
 import 'package:flutter_soloud/flutter_soloud.dart';
 
+import 'timbre.dart';
+
 /// Metronome sound interface.
 abstract class ClickPlayer {
   /// Load audio resources; must be called once before playing.
@@ -19,6 +21,9 @@ abstract class ClickPlayer {
   /// Play a normal beat.
   void playNormal();
 
+  /// Switch the active timbre (sound voice) used by subsequent clicks.
+  void setTimbre(Timbre timbre);
+
   /// Release resources.
   void dispose();
 }
@@ -26,21 +31,20 @@ abstract class ClickPlayer {
 /// flutter_soloud-based implementation.
 ///
 /// Design notes:
-/// - Uses a single click source (the user-provided unfa 2kHz pulse, FLAC,
-///   ~50ms).
-/// - Accent vs. normal beats are distinguished not by two asset files but by
-///   **volume + playback speed (pitch)**: the accent plays at normal speed and
-///   full volume; the normal beat plays faster (higher-pitched, shorter) at
-///   slightly lower volume. This cleanly distinguishes bars from a single file
-///   and avoids mismatched assets.
-/// - The click is short, preloaded as an in-memory source, so playback has zero
-///   disk IO and minimal latency.
+/// - Each [Timbre]'s assets are preloaded at [init] (keyed by asset path) so
+///   switching is instant and playback has zero disk IO.
+/// - For single-sample timbres (accent and normal share one file) accent vs.
+///   normal is distinguished by **volume + playback speed (pitch)**: the accent
+///   plays at normal speed and full volume; the normal beat plays faster
+///   (higher-pitched, shorter) at slightly lower volume.
+/// - For multi-sample timbres (e.g. a drum kit: snare on the downbeat, hi-hat
+///   elsewhere) the two files already differ, so they play at full volume and
+///   natural pitch ([Timbre.pitched] == false).
 /// - Each playback is a one-shot; handles are not reused, avoiding mutual
 ///   interruption.
 class SoLoudClickPlayer implements ClickPlayer {
-  static const String _clickAsset = 'assets/sounds/click.flac';
-
-  // Volume and pitch (relative playback speed) differences for accent/normal.
+  // Volume and pitch (relative playback speed) differences for accent/normal,
+  // applied only to single-sample (pitched) timbres.
   static const double _accentVolume = 1.0;
   static const double _normalVolume = 0.6;
   static const double _accentSpeed = 1.0;
@@ -48,7 +52,9 @@ class SoLoudClickPlayer implements ClickPlayer {
 
   final SoLoud _soloud = SoLoud.instance;
 
-  AudioSource? _click;
+  /// Preloaded sources keyed by asset path.
+  final Map<String, AudioSource> _sources = {};
+  Timbre _current = kDefaultTimbre;
   bool _ready = false;
 
   @override
@@ -56,18 +62,46 @@ class SoLoudClickPlayer implements ClickPlayer {
     if (!_soloud.isInitialized) {
       await _soloud.init();
     }
-    _click = await _soloud.loadAsset(_clickAsset);
+    // Preload every asset referenced by any timbre. A missing/failed asset is
+    // skipped so the rest still work.
+    for (final t in kTimbres) {
+      for (final asset in t.assets) {
+        if (_sources.containsKey(asset)) continue;
+        try {
+          _sources[asset] = await _soloud.loadAsset(asset);
+        } catch (_) {
+          // Asset not present yet — ignore; playback no-ops for it.
+        }
+      }
+    }
     _ready = true;
   }
 
   @override
-  void playAccent() => _playClick(_accentVolume, _accentSpeed);
+  void setTimbre(Timbre timbre) => _current = timbre;
 
   @override
-  void playNormal() => _playClick(_normalVolume, _normalSpeed);
+  void playAccent() {
+    final pitched = _current.pitched;
+    _play(
+      _current.accentAsset,
+      volume: pitched ? _accentVolume : 1.0,
+      speed: _accentSpeed,
+    );
+  }
 
-  void _playClick(double volume, double speed) {
-    final src = _click;
+  @override
+  void playNormal() {
+    final pitched = _current.pitched;
+    _play(
+      _current.normalAsset,
+      volume: pitched ? _normalVolume : 1.0,
+      speed: pitched ? _normalSpeed : 1.0,
+    );
+  }
+
+  void _play(String asset, {required double volume, required double speed}) {
+    final src = _sources[asset];
     if (!_ready || src == null) return;
     // Start paused to set parameters, then resume — ensures volume/pitch take
     // effect before any sound is produced.
@@ -78,9 +112,10 @@ class SoLoudClickPlayer implements ClickPlayer {
 
   @override
   void dispose() {
-    final src = _click;
-    if (src != null) _soloud.disposeSource(src);
-    _click = null;
+    for (final src in _sources.values) {
+      _soloud.disposeSource(src);
+    }
+    _sources.clear();
     _ready = false;
   }
 }

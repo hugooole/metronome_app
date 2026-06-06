@@ -63,6 +63,12 @@ flutter:
 
   assets:
     - assets/sounds/
+    - assets/fonts/
+
+  fonts:
+    - family: Musisync
+      fonts:
+        - asset: assets/fonts/Musisync.ttf
 
   # To add assets to your application, add an assets section, like this:
   # assets:

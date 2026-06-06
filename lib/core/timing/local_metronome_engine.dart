@@ -5,8 +5,6 @@
 /// Production uses [IsolateMetronomeEngine].
 library;
 
-// The constructor intentionally uses named params + an initializer list
-// (fields are private); this reads better than initializing formals.
 // ignore_for_file: prefer_initializing_formals
 
 import 'dart:async';
@@ -16,8 +14,6 @@ import 'package:clock/clock.dart';
 import 'metronome_engine.dart';
 
 class LocalMetronomeEngine implements MetronomeEngine {
-  /// Check interval. Much smaller than the beat interval so the "is it time
-  /// yet" decision is timely enough.
   static const Duration _tickInterval = Duration(milliseconds: 5);
 
   void Function(BeatEvent event) _onBeat;
@@ -25,8 +21,12 @@ class LocalMetronomeEngine implements MetronomeEngine {
 
   Timer? _ticker;
   DateTime? _startTime;
-  int _nextBeatMicros = 0;
+  // Beat-anchored scheduling: each beat's start is exact; slots within a beat
+  // are derived as beatStart + slotIndex * beatInterval / slotsPerBeat.
+  // This prevents fractional-microsecond drift accumulation for triplets.
+  int _beatStartMicros = 0; // theoretical start of the current beat
   int _nextBeatIndex = 0;
+  int _nextSlotIndex = 0; // 0 .. slotsPerBeat-1
 
   LocalMetronomeEngine({
     required void Function(BeatEvent event) onBeat,
@@ -45,8 +45,9 @@ class LocalMetronomeEngine implements MetronomeEngine {
   void start() {
     if (isRunning) return;
     _startTime = clock.now();
-    _nextBeatMicros = 0; // first beat fires immediately
+    _beatStartMicros = 0;
     _nextBeatIndex = 0;
+    _nextSlotIndex = 0;
     _ticker = Timer.periodic(_tickInterval, (_) => _onTick());
   }
 
@@ -60,9 +61,13 @@ class LocalMetronomeEngine implements MetronomeEngine {
   @override
   void updateConfig(MetronomeConfig next) {
     _config = next;
-    if (_nextBeatIndex >= next.beatsPerBar) {
-      _nextBeatIndex = 0;
-    }
+    if (_nextBeatIndex >= next.beatsPerBar) _nextBeatIndex = 0;
+  }
+
+  int get _nextSlotMicros {
+    final beat = _config.beatIntervalMicros;
+    final n = _config.slotsPerBeat;
+    return _beatStartMicros + _nextSlotIndex * beat ~/ n;
   }
 
   void _onTick() {
@@ -71,18 +76,33 @@ class LocalMetronomeEngine implements MetronomeEngine {
 
     final now = clock.now().difference(startTime).inMicroseconds;
 
-    // A single tick may need to emit multiple beats (very high BPM or a
-    // main-thread stall).
-    while (now >= _nextBeatMicros) {
+    while (now >= _nextSlotMicros) {
       final beatIndex = _nextBeatIndex;
-      _onBeat(BeatEvent(
-        beatIndex: beatIndex,
-        isAccent: beatIndex == 0,
-        scheduledMicros: _nextBeatMicros,
-      ));
-      // Theoretical time advances by the beat interval — drift eliminated here.
-      _nextBeatMicros += _config.beatIntervalMicros;
-      _nextBeatIndex = (beatIndex + 1) % _config.beatsPerBar;
+      final slotIndex = _nextSlotIndex;
+      final scheduledMicros = _nextSlotMicros;
+      final raw = _config.pattern.slots[slotIndex];
+      // Bar downbeat (beat 0, slot 0): force accent unless the pattern rests it.
+      // All other slots: treat pattern's `accent` marker as `normal`.
+      final slotType = (beatIndex == 0 && slotIndex == 0)
+          ? (raw == SlotType.rest ? SlotType.rest : SlotType.accent)
+          : (raw == SlotType.accent ? SlotType.normal : raw);
+
+      if (slotType != SlotType.rest) {
+        _onBeat(BeatEvent(
+          beatIndex: beatIndex,
+          slotIndex: slotIndex,
+          slotType: slotType,
+          scheduledMicros: scheduledMicros,
+        ));
+      }
+
+      _nextSlotIndex++;
+      if (_nextSlotIndex >= _config.slotsPerBeat) {
+        _nextSlotIndex = 0;
+        // Beat boundary advances by exactly beatIntervalMicros — zero drift.
+        _beatStartMicros += _config.beatIntervalMicros;
+        _nextBeatIndex = (_nextBeatIndex + 1) % _config.beatsPerBar;
+      }
     }
   }
 
