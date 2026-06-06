@@ -1,13 +1,6 @@
 /// Isolate-based timing engine implementation (production).
-///
-/// Timing runs in a dedicated Isolate (see [timer_isolate.dart]) so the main
-/// thread's UI repaints, animations, and GC don't interfere with the beat.
-/// Beats are sent back to the main isolate via SendPort, then trigger sound and
-/// UI updates.
 library;
 
-// The constructor intentionally uses named params + an initializer list
-// (fields are private); this reads better than initializing formals.
 // ignore_for_file: prefer_initializing_formals
 
 import 'dart:async';
@@ -23,7 +16,7 @@ class IsolateMetronomeEngine implements MetronomeEngine {
   Isolate? _isolate;
   ReceivePort? _fromIsolate;
   StreamSubscription? _sub;
-  SendPort? _control; // sends config updates / stop to the Isolate
+  SendPort? _control;
 
   IsolateMetronomeEngine({
     required void Function(BeatEvent event) onBeat,
@@ -41,8 +34,6 @@ class IsolateMetronomeEngine implements MetronomeEngine {
   @override
   void start() {
     if (isRunning) return;
-    // Spawn the Isolate asynchronously; start() keeps a sync signature to match
-    // the interface.
     unawaited(_spawn());
   }
 
@@ -52,13 +43,14 @@ class IsolateMetronomeEngine implements MetronomeEngine {
 
     _sub = fromIsolate.listen((msg) {
       if (msg is SendPort) {
-        _control = msg; // control port sent back by the Isolate
+        _control = msg;
       } else if (msg is List) {
-        // Beat message: [beatIndex, isAccent, scheduledMicros]
+        // Message: [beatIndex, slotIndex, slotTypeIndex, scheduledMicros]
         _onBeat(BeatEvent(
           beatIndex: msg[0] as int,
-          isAccent: (msg[1] as int) == 1,
-          scheduledMicros: msg[2] as int,
+          slotIndex: msg[1] as int,
+          slotType: SlotType.values[msg[2] as int],
+          scheduledMicros: msg[3] as int,
         ));
       }
     });
@@ -69,6 +61,7 @@ class IsolateMetronomeEngine implements MetronomeEngine {
         toMain: fromIsolate.sendPort,
         bpm: _config.bpm,
         beatsPerBar: _config.beatsPerBar,
+        patternSlots: _config.pattern.slots.map((s) => s.index).toList(),
       ),
     );
   }
@@ -88,7 +81,11 @@ class IsolateMetronomeEngine implements MetronomeEngine {
   @override
   void updateConfig(MetronomeConfig next) {
     _config = next;
-    _control?.send(ConfigUpdate(next.bpm, next.beatsPerBar));
+    _control?.send(ConfigUpdate(
+      next.bpm,
+      next.beatsPerBar,
+      next.pattern.slots.map((s) => s.index).toList(),
+    ));
   }
 
   @override

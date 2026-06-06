@@ -1,27 +1,23 @@
 /// The timing core that runs inside a dedicated Isolate.
-///
-/// Why an Isolate: UI repaints, animations, and GC on the main isolate all
-/// preempt the event loop and delay Timer callbacks. Isolating the timing keeps
-/// the beat unaffected by main-thread stalls.
-///
-/// Drift handling matches the main implementation: the theoretical beat time
-/// advances by `+= interval`, rather than resetting the baseline to the actual
-/// fire time (the latter accumulates error — a flaw in the reference project).
 library;
 
 import 'dart:async';
 import 'dart:isolate';
+
+import 'rhythm_pattern.dart';
 
 /// Initialization parameters passed when spawning the Isolate.
 class TimerInit {
   final SendPort toMain;
   final int bpm;
   final int beatsPerBar;
+  final List<int> patternSlots; // SlotType indices, variable length (3 or 4)
 
   const TimerInit({
     required this.toMain,
     required this.bpm,
     required this.beatsPerBar,
+    required this.patternSlots,
   });
 }
 
@@ -29,40 +25,57 @@ class TimerInit {
 class ConfigUpdate {
   final int bpm;
   final int beatsPerBar;
-  const ConfigUpdate(this.bpm, this.beatsPerBar);
+  final List<int> patternSlots;
+  const ConfigUpdate(this.bpm, this.beatsPerBar, this.patternSlots);
 }
 
-/// Isolate → main beat message. Sent as a plain List to minimize cross-isolate
-/// overhead. Format: [beatIndex, isAccent(0/1), scheduledMicros]
-typedef BeatMessage = List<int>;
+const int _kTickMicros = 2000;
 
-const int _kTickMicros = 2000; // check whether it's time every 2ms
-
-/// Isolate entry point. `data` is a [TimerInit].
 void timerIsolateEntry(TimerInit init) {
   final control = ReceivePort();
-  // First thing: send the control port back to the main isolate so it can
-  // receive config updates and the stop signal.
   init.toMain.send(control.sendPort);
 
   int bpm = init.bpm;
   int beatsPerBar = init.beatsPerBar;
+  List<int> patternSlots = init.patternSlots;
 
   int beatInterval() => (60 * 1000 * 1000) ~/ bpm;
 
-  final clock = Stopwatch()..start(); // isolate-local; no need for a test clock
-  int nextBeatMicros = 0;
+  final clock = Stopwatch()..start();
+  int beatStartMicros = 0;
   int nextBeatIndex = 0;
+  int nextSlotIndex = 0;
 
-  Timer? ticker;
+  int nextSlotMicros() =>
+      beatStartMicros + nextSlotIndex * beatInterval() ~/ patternSlots.length;
 
   void onTick(Timer _) {
     final now = clock.elapsedMicroseconds;
-    while (now >= nextBeatMicros) {
-      final isAccent = nextBeatIndex == 0;
-      init.toMain.send(<int>[nextBeatIndex, isAccent ? 1 : 0, nextBeatMicros]);
-      nextBeatMicros += beatInterval(); // theoretical time advances — no drift
-      nextBeatIndex = (nextBeatIndex + 1) % beatsPerBar;
+    while (now >= nextSlotMicros()) {
+      final beatIndex = nextBeatIndex;
+      final slotIndex = nextSlotIndex;
+      final scheduledMicros = nextSlotMicros();
+      final raw = SlotType.values[patternSlots[slotIndex]];
+      final slotType = (beatIndex == 0 && slotIndex == 0)
+          ? (raw == SlotType.rest ? SlotType.rest : SlotType.accent)
+          : (raw == SlotType.accent ? SlotType.normal : raw);
+
+      if (slotType != SlotType.rest) {
+        init.toMain.send(<int>[
+          beatIndex,
+          slotIndex,
+          slotType.index,
+          scheduledMicros,
+        ]);
+      }
+
+      nextSlotIndex++;
+      if (nextSlotIndex >= patternSlots.length) {
+        nextSlotIndex = 0;
+        // Beat boundary advances by exactly beatIntervalMicros — zero drift.
+        beatStartMicros += beatInterval();
+        nextBeatIndex = (nextBeatIndex + 1) % beatsPerBar;
+      }
     }
   }
 
@@ -71,11 +84,11 @@ void timerIsolateEntry(TimerInit init) {
       bpm = msg.bpm;
       if (nextBeatIndex >= msg.beatsPerBar) nextBeatIndex = 0;
       beatsPerBar = msg.beatsPerBar;
+      patternSlots = msg.patternSlots;
     } else if (msg == 'stop') {
-      ticker?.cancel();
       control.close();
     }
   });
 
-  ticker = Timer.periodic(const Duration(microseconds: _kTickMicros), onTick);
+  Timer.periodic(const Duration(microseconds: _kTickMicros), onTick);
 }
