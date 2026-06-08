@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import '../../../core/audio/click_player.dart';
 import '../../../core/audio/timbre.dart';
 import '../../../core/timing/isolate_metronome_engine.dart';
+import '../../../core/timing/local_metronome_engine.dart';
 import '../../../core/timing/metronome_engine.dart';
 import '../../../data/settings_repository.dart';
 
@@ -33,7 +34,13 @@ class MetronomeController extends ChangeNotifier {
     MetronomeEngine? engine,
   })  : _player = player,
         _settings = settings,
-        _engine = engine ?? IsolateMetronomeEngine(onBeat: (_) {}) {
+        // Web doesn't support dart:isolate, so fall back to the same-isolate
+        // engine there. Native platforms use a dedicated isolate so main-thread
+        // stalls don't disturb the beat.
+        _engine = engine ??
+            (kIsWeb
+                ? LocalMetronomeEngine(onBeat: (_) {})
+                : IsolateMetronomeEngine(onBeat: (_) {})) {
     _engine.onBeatHandler = _handleBeat;
   }
 
