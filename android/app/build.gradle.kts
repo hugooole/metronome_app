@@ -7,6 +7,7 @@ plugins {
 android {
     namespace = "com.metronome.metronome_app"
     compileSdk = flutter.compileSdkVersion
+    buildToolsVersion = "34.0.0"
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -31,6 +32,10 @@ android {
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
         }
+    }
+
+    androidResources {
+        noCompress += listOf("flac")
     }
 }
 

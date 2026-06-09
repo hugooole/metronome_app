@@ -45,8 +45,6 @@ class AudioTrackMetronome(private val context: Context) {
     // MARK: - Start / Stop
 
     fun start() {
-        loadBuffers()
-
         val minBuf = AudioTrack.getMinBufferSize(
             SAMPLE_RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_FLOAT)
         val bufSize = maxOf(minBuf * 2, 8192)
@@ -64,9 +62,12 @@ class AudioTrackMetronome(private val context: Context) {
             .setBufferSizeInBytes(bufSize)
             .setTransferMode(AudioTrack.MODE_STREAM)
             .build()
-            .also { it.play() }
 
-        job = CoroutineScope(audioDispatcher).launch { streamAudio() }
+        job = CoroutineScope(audioDispatcher).launch {
+            loadBuffers()
+            audioTrack?.play()
+            streamAudio()
+        }
     }
 
     fun stop() {
@@ -87,64 +88,79 @@ class AudioTrackMetronome(private val context: Context) {
 
     // MARK: - Streaming loop
 
+    private data class ActiveClip(val buf: FloatArray, var offset: Int)
+
     private suspend fun streamAudio() = withContext(audioDispatcher) {
-        var totalFramesWritten = 0L
-        var totalBeats = 0L
+        val chunkSize = 512
+        val chunk = FloatArray(chunkSize)
+        var cursor = 0L          // next frame to render
+        var nextBeatFrame = 0L
         var nextBeatIndex = 0
+        var nextSlotIndex = 0
+        val activeClips = mutableListOf<ActiveClip>()
 
         while (isActive) {
             val snap = config
             val timbreId = currentTimbreId
-
-            val nextBeatFrame = (totalBeats + 1) * snap.samplesPerBeat
-
-            // Write silence up to the next beat boundary (minus click lead-in).
             val accentBuf = accentBuffers[timbreId] ?: accentBuffers["click"] ?: FloatArray(0)
             val normalBuf = normalBuffers[timbreId] ?: normalBuffers["click"] ?: FloatArray(0)
 
-            // Schedule each slot within this beat.
-            for (slotIdx in 0 until snap.slotsPerBeat) {
-                val slotFrame = nextBeatFrame + slotIdx.toLong() * snap.samplesPerBeat / snap.slotsPerBeat
-                val raw = snap.patternSlots[slotIdx]
+            // Queue all slots that start within this chunk.
+            val chunkEnd = cursor + chunkSize
+            while (true) {
+                val slotFrame = nextBeatFrame + nextSlotIndex.toLong() * snap.samplesPerBeat / snap.slotsPerBeat
+                if (slotFrame >= chunkEnd) break
+                val raw = snap.patternSlots[nextSlotIndex]
                 val slotType = when {
-                    nextBeatIndex == 0 && slotIdx == 0 -> if (raw == 2) 2 else 0
+                    nextBeatIndex == 0 && nextSlotIndex == 0 -> if (raw == 2) 2 else 0
                     raw == 0 -> 1
                     else -> raw
                 }
-
-                val clickBuf: FloatArray = if (slotType == 0) accentBuf else if (slotType == 1) normalBuf else FloatArray(0)
-
-                if (slotType != 2 && clickBuf.isNotEmpty()) {
-                    // Write silence up to (slotFrame - clickBuf.size) so click lands at slotFrame.
-                    val clickStart = slotFrame - clickBuf.size
-                    val silenceCount = (clickStart - totalFramesWritten).toInt().coerceAtLeast(0)
-                    if (silenceCount > 0) {
-                        writeBlocking(FloatArray(silenceCount))
-                        totalFramesWritten += silenceCount
+                if (slotType != 2) {
+                    val buf = if (slotType == 0) accentBuf else normalBuf
+                    if (buf.isNotEmpty()) {
+                        // offset accounts for frames already past before this chunk started
+                        val skipFrames = (cursor - slotFrame).toInt().coerceAtLeast(0)
+                        activeClips.add(ActiveClip(buf, skipFrames))
                     }
-                    writeBlocking(clickBuf)
-                    totalFramesWritten += clickBuf.size
+                    if (nextSlotIndex == 0) {
+                        val beatIdx = nextBeatIndex
+                        val capturedType = slotType
+                        val markerFrame = (slotFrame - cursor).toInt().coerceAtLeast(0)
+                        val markerPos = (cursor + markerFrame).toInt()
+                        audioTrack?.setNotificationMarkerPosition(markerPos)
+                        audioTrack?.setPlaybackPositionUpdateListener(object : AudioTrack.OnPlaybackPositionUpdateListener {
+                            override fun onMarkerReached(track: AudioTrack) {
+                                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                    onBeat?.invoke(mapOf("beatIndex" to beatIdx, "slotIndex" to 0, "slotType" to capturedType))
+                                }
+                                track.setPlaybackPositionUpdateListener(null)
+                            }
+                            override fun onPeriodicNotification(track: AudioTrack) {}
+                        })
+                    }
                 }
-
-                if (slotIdx == 0) {
-                    val beatIdx = nextBeatIndex
-                    val handler = android.os.Handler(android.os.Looper.getMainLooper())
-                    handler.post {
-                        onBeat?.invoke(mapOf("beatIndex" to beatIdx, "slotIndex" to 0, "slotType" to slotType))
-                    }
+                nextSlotIndex++
+                if (nextSlotIndex >= snap.slotsPerBeat) {
+                    nextSlotIndex = 0
+                    nextBeatFrame += snap.samplesPerBeat
+                    nextBeatIndex = (nextBeatIndex + 1) % snap.beatsPerBar
                 }
             }
 
-            // Write silence to fill the rest of this beat.
-            val endOfBeat = nextBeatFrame + snap.samplesPerBeat
-            val tailSilence = (endOfBeat - totalFramesWritten).toInt().coerceAtLeast(0)
-            if (tailSilence > 0) {
-                writeBlocking(FloatArray(tailSilence))
-                totalFramesWritten += tailSilence
+            // Mix active clips into chunk.
+            chunk.fill(0f)
+            val toRemove = mutableListOf<ActiveClip>()
+            for (clip in activeClips) {
+                val frames = minOf(chunkSize, clip.buf.size - clip.offset)
+                for (i in 0 until frames) chunk[i] += clip.buf[clip.offset + i]
+                clip.offset += frames
+                if (clip.offset >= clip.buf.size) toRemove.add(clip)
             }
+            activeClips.removeAll(toRemove)
 
-            nextBeatIndex = (nextBeatIndex + 1) % snap.beatsPerBar
-            totalBeats++
+            writeBlocking(chunk)
+            cursor += chunkSize
         }
     }
 
@@ -159,7 +175,7 @@ class AudioTrackMetronome(private val context: Context) {
 
     // MARK: - Buffer loading
 
-    private fun loadBuffers() {
+    private suspend fun loadBuffers() {
         data class TimbreDef(val id: String, val accentFile: String, val normalFile: String?)
         val timbres = listOf(
             TimbreDef("click", "flutter_assets/assets/sounds/click.flac", null),
@@ -169,14 +185,18 @@ class AudioTrackMetronome(private val context: Context) {
         for (t in timbres) {
             decodeFLAC(t.accentFile)?.let { pcm ->
                 accentBuffers[t.id] = pcm
+                android.util.Log.d("AudioTrackMetronome", "loaded accent[${t.id}]: ${pcm.size} samples")
                 if (t.normalFile == null) {
                     normalBuffers[t.id] = pcm.map { it * 0.6f }.toFloatArray()
                 }
-            }
+            } ?: android.util.Log.e("AudioTrackMetronome", "FAILED accent[${t.id}]: ${t.accentFile}")
             t.normalFile?.let { nf ->
-                decodeFLAC(nf)?.let { normalBuffers[t.id] = it }
+                decodeFLAC(nf)?.let { normalBuffers[t.id] = it
+                    android.util.Log.d("AudioTrackMetronome", "loaded normal[${t.id}]: ${it.size} samples")
+                } ?: android.util.Log.e("AudioTrackMetronome", "FAILED normal[${t.id}]: $nf")
             }
         }
+        android.util.Log.d("AudioTrackMetronome", "buffers ready — accent:${accentBuffers.keys} normal:${normalBuffers.keys}")
     }
 
     private fun decodeFLAC(assetPath: String): FloatArray? {
@@ -204,47 +224,60 @@ class AudioTrackMetronome(private val context: Context) {
 
             val pcmChunks = mutableListOf<ByteArray>()
             val bufInfo = MediaCodec.BufferInfo()
-            var sawEOS = false
+            var inputDone = false
+            var outputDone = false
+            var outputFormat = codec.outputFormat
 
-            while (!sawEOS) {
-                val inIdx = codec.dequeueInputBuffer(10_000)
-                if (inIdx >= 0) {
-                    val inBuf = codec.getInputBuffer(inIdx)!!
-                    val sampleSize = extractor.readSampleData(inBuf, 0)
-                    if (sampleSize < 0) {
-                        codec.queueInputBuffer(inIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                        sawEOS = true
-                    } else {
-                        codec.queueInputBuffer(inIdx, 0, sampleSize, extractor.sampleTime, 0)
-                        extractor.advance()
+            while (!outputDone) {
+                if (!inputDone) {
+                    val inIdx = codec.dequeueInputBuffer(10_000)
+                    if (inIdx >= 0) {
+                        val inBuf = codec.getInputBuffer(inIdx)!!
+                        val sampleSize = extractor.readSampleData(inBuf, 0)
+                        if (sampleSize < 0) {
+                            codec.queueInputBuffer(inIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                            inputDone = true
+                        } else {
+                            codec.queueInputBuffer(inIdx, 0, sampleSize, extractor.sampleTime, 0)
+                            extractor.advance()
+                        }
                     }
                 }
                 val outIdx = codec.dequeueOutputBuffer(bufInfo, 10_000)
-                if (outIdx >= 0) {
-                    val outBuf = codec.getOutputBuffer(outIdx)!!
-                    val bytes = ByteArray(bufInfo.size)
-                    outBuf.get(bytes)
-                    pcmChunks.add(bytes)
-                    codec.releaseOutputBuffer(outIdx, false)
+                when {
+                    outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> outputFormat = codec.outputFormat
+                    outIdx >= 0 -> {
+                        val outBuf = codec.getOutputBuffer(outIdx)!!
+                        val bytes = ByteArray(bufInfo.size)
+                        outBuf.get(bytes)
+                        pcmChunks.add(bytes)
+                        codec.releaseOutputBuffer(outIdx, false)
+                        if (bufInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) outputDone = true
+                    }
                 }
             }
-
             codec.stop(); codec.release(); extractor.release()
 
-            // Convert raw PCM bytes to float. Assume 16-bit signed little-endian mono.
+            val pcmEncoding = if (outputFormat.containsKey(MediaFormat.KEY_PCM_ENCODING))
+                outputFormat.getInteger(MediaFormat.KEY_PCM_ENCODING)
+            else
+                AudioFormat.ENCODING_PCM_16BIT
+
             val total = pcmChunks.sumOf { it.size }
-            val floats = FloatArray(total / 2)
+            val bytesPerSample = if (pcmEncoding == AudioFormat.ENCODING_PCM_FLOAT) 4 else 2
+            val floats = FloatArray(total / bytesPerSample)
             var pos = 0
             for (chunk in pcmChunks) {
-                var i = 0
-                while (i + 1 < chunk.size) {
-                    val sample = (chunk[i].toInt() and 0xFF) or (chunk[i + 1].toInt() shl 8)
-                    floats[pos++] = sample.toShort() / 32768f
-                    i += 2
+                val buf = ByteBuffer.wrap(chunk).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                if (pcmEncoding == AudioFormat.ENCODING_PCM_FLOAT) {
+                    while (buf.remaining() >= 4) floats[pos++] = buf.float
+                } else {
+                    while (buf.remaining() >= 2) floats[pos++] = buf.short / 32768f
                 }
             }
             floats
         } catch (e: Exception) {
+            android.util.Log.e("AudioTrackMetronome", "decodeFLAC failed: $assetPath", e)
             null
         }
     }

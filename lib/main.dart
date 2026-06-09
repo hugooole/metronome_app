@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'core/audio/click_player.dart';
@@ -8,8 +9,11 @@ import 'features/metronome/ui/metronome_screen.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Web uses Dart timing + Dart audio; native platforms use native audio.
+  final player = kIsWeb ? SoLoudClickPlayer() : NoOpClickPlayer();
+
   final controller = MetronomeController(
-    player: SoLoudClickPlayer(),
+    player: player,
     settings: PrefsSettingsRepository(),
   );
 

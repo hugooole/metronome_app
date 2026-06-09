@@ -28,6 +28,24 @@ abstract class ClickPlayer {
   void dispose();
 }
 
+/// No-op player for platforms that handle audio natively.
+class NoOpClickPlayer implements ClickPlayer {
+  @override
+  Future<void> init() async {}
+
+  @override
+  void playAccent() {}
+
+  @override
+  void playNormal() {}
+
+  @override
+  void setTimbre(Timbre timbre) {}
+
+  @override
+  void dispose() {}
+}
+
 /// flutter_soloud-based implementation.
 ///
 /// Design notes:
