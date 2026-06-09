@@ -50,6 +50,7 @@ class MetronomePlugin(private val context: Context) {
                     result.success(null)
                 }
                 "stop" -> {
+                    metronome?.onBeat = null
                     metronome?.stop()
                     metronome = null
                     result.success(null)

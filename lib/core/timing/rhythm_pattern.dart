@@ -60,7 +60,7 @@ const List<RhythmPattern> kRhythmPresets = [
     id: 'eighth_rest',
     name: '八分休止',
     slots: [SlotType.rest, SlotType.rest, SlotType.normal, SlotType.rest],
-    glyph: 'E',
+    glyph: 'EÉ',
   ),
   // triplet — three equal
   RhythmPattern(
@@ -82,7 +82,7 @@ const List<RhythmPattern> kRhythmPresets = [
     id: 'triplet_13',
     name: '三连一三',
     slots: [SlotType.accent, SlotType.rest, SlotType.normal],
-    glyph: '¼',
+    glyph: 'Ñ',
   ),
   // triplet: 2 notes + rest  (♪♪ 𝄻)
   RhythmPattern(
@@ -111,7 +111,7 @@ const List<RhythmPattern> kRhythmPresets = [
     id: 'sixteenth_sync',
     name: '十六切分',
     slots: [SlotType.rest, SlotType.normal, SlotType.rest, SlotType.normal],
-    glyph: 's',
+    glyph: 'SsSs',
   ),
   // eighth + two sixteenths  (long-short-short)
   RhythmPattern(

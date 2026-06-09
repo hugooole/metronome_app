@@ -73,9 +73,10 @@ class AudioTrackMetronome(private val context: Context) {
     fun stop() {
         job?.cancel()
         job = null
-        audioTrack?.stop()
-        audioTrack?.release()
+        val track = audioTrack
         audioTrack = null
+        track?.stop()
+        track?.release()
     }
 
     fun updateConfig(bpm: Int, beatsPerBar: Int, patternSlots: List<Int>) {
@@ -123,22 +124,22 @@ class AudioTrackMetronome(private val context: Context) {
                         val skipFrames = (cursor - slotFrame).toInt().coerceAtLeast(0)
                         activeClips.add(ActiveClip(buf, skipFrames))
                     }
-                    if (nextSlotIndex == 0) {
-                        val beatIdx = nextBeatIndex
-                        val capturedType = slotType
-                        val markerFrame = (slotFrame - cursor).toInt().coerceAtLeast(0)
-                        val markerPos = (cursor + markerFrame).toInt()
-                        audioTrack?.setNotificationMarkerPosition(markerPos)
-                        audioTrack?.setPlaybackPositionUpdateListener(object : AudioTrack.OnPlaybackPositionUpdateListener {
-                            override fun onMarkerReached(track: AudioTrack) {
-                                android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                    onBeat?.invoke(mapOf("beatIndex" to beatIdx, "slotIndex" to 0, "slotType" to capturedType))
-                                }
-                                track.setPlaybackPositionUpdateListener(null)
+                }
+                if (nextSlotIndex == 0) {
+                    val beatIdx = nextBeatIndex
+                    val capturedType = slotType
+                    val markerFrame = (slotFrame - cursor).toInt().coerceAtLeast(0)
+                    val markerPos = (cursor + markerFrame).toInt()
+                    audioTrack?.setNotificationMarkerPosition(markerPos)
+                    audioTrack?.setPlaybackPositionUpdateListener(object : AudioTrack.OnPlaybackPositionUpdateListener {
+                        override fun onMarkerReached(track: AudioTrack) {
+                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                onBeat?.invoke(mapOf("beatIndex" to beatIdx, "slotIndex" to 0, "slotType" to capturedType))
                             }
-                            override fun onPeriodicNotification(track: AudioTrack) {}
-                        })
-                    }
+                            track.setPlaybackPositionUpdateListener(null)
+                        }
+                        override fun onPeriodicNotification(track: AudioTrack) {}
+                    })
                 }
                 nextSlotIndex++
                 if (nextSlotIndex >= snap.slotsPerBeat) {
@@ -166,10 +167,14 @@ class AudioTrackMetronome(private val context: Context) {
 
     private fun writeBlocking(data: FloatArray) {
         var written = 0
-        while (written < data.size) {
-            val result = audioTrack?.write(data, written, data.size - written, AudioTrack.WRITE_BLOCKING) ?: break
-            if (result <= 0) break
-            written += result
+        try {
+            while (written < data.size) {
+                val result = audioTrack?.write(data, written, data.size - written, AudioTrack.WRITE_BLOCKING) ?: break
+                if (result <= 0) break
+                written += result
+            }
+        } catch (_: IllegalStateException) {
+            // AudioTrack was released while writing — normal during stop()
         }
     }
 
