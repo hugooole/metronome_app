@@ -14,13 +14,17 @@ import 'package:clock/clock.dart';
 import 'metronome_engine.dart';
 
 class LocalMetronomeEngine implements MetronomeEngine {
-  static const Duration _tickInterval = Duration(milliseconds: 5);
+  static const Duration _tickInterval = Duration(milliseconds: 2);
+  // Dispatch events this many microseconds before they are due, so the
+  // callback has time to schedule a Future.delayed for the exact moment.
+  static const int _lookaheadMicros = 20000;
 
   void Function(BeatEvent event) _onBeat;
   MetronomeConfig _config;
 
   Timer? _ticker;
   DateTime? _startTime;
+  DateTime? get startTime => _startTime;
   // Beat-anchored scheduling: each beat's start is exact; slots within a beat
   // are derived as beatStart + slotIndex * beatInterval / slotsPerBeat.
   // This prevents fractional-microsecond drift accumulation for triplets.
@@ -37,6 +41,9 @@ class LocalMetronomeEngine implements MetronomeEngine {
   @override
   set onBeatHandler(void Function(BeatEvent event) handler) =>
       _onBeat = handler;
+
+  @override
+  bool get handlesAudio => false;
 
   @override
   bool get isRunning => _ticker != null;
@@ -75,8 +82,9 @@ class LocalMetronomeEngine implements MetronomeEngine {
     if (startTime == null) return;
 
     final now = clock.now().difference(startTime).inMicroseconds;
+    final horizon = now + _lookaheadMicros;
 
-    while (now >= _nextSlotMicros) {
+    while (horizon >= _nextSlotMicros) {
       final beatIndex = _nextBeatIndex;
       final slotIndex = _nextSlotIndex;
       final scheduledMicros = _nextSlotMicros;

@@ -88,6 +88,10 @@ abstract class MetronomeEngine {
 
   bool get isRunning;
 
+  /// True when the engine handles audio playback natively. When true,
+  /// MetronomeController skips ClickPlayer calls on beat events.
+  bool get handlesAudio => false;
+
   void start();
   void stop();
 

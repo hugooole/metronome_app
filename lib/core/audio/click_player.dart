@@ -48,7 +48,7 @@ class SoLoudClickPlayer implements ClickPlayer {
   static const double _accentVolume = 1.0;
   static const double _normalVolume = 0.6;
   static const double _accentSpeed = 1.0;
-  static const double _normalSpeed = 1.5; // higher pitch feels "lighter"
+  static const double _normalSpeed = 1.0; // higher pitch feels "lighter"
 
   final SoLoud _soloud = SoLoud.instance;
 

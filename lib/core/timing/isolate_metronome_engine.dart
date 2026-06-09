@@ -29,6 +29,9 @@ class IsolateMetronomeEngine implements MetronomeEngine {
       _onBeat = handler;
 
   @override
+  bool get handlesAudio => false;
+
+  @override
   bool get isRunning => _isolate != null;
 
   @override
