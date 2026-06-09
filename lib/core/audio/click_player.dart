@@ -28,6 +28,24 @@ abstract class ClickPlayer {
   void dispose();
 }
 
+/// No-op player for platforms that handle audio natively.
+class NoOpClickPlayer implements ClickPlayer {
+  @override
+  Future<void> init() async {}
+
+  @override
+  void playAccent() {}
+
+  @override
+  void playNormal() {}
+
+  @override
+  void setTimbre(Timbre timbre) {}
+
+  @override
+  void dispose() {}
+}
+
 /// flutter_soloud-based implementation.
 ///
 /// Design notes:
@@ -48,7 +66,7 @@ class SoLoudClickPlayer implements ClickPlayer {
   static const double _accentVolume = 1.0;
   static const double _normalVolume = 0.6;
   static const double _accentSpeed = 1.0;
-  static const double _normalSpeed = 1.5; // higher pitch feels "lighter"
+  static const double _normalSpeed = 1.0; // higher pitch feels "lighter"
 
   final SoLoud _soloud = SoLoud.instance;
 

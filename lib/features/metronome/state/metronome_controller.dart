@@ -7,9 +7,9 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/audio/click_player.dart';
 import '../../../core/audio/timbre.dart';
-import '../../../core/timing/isolate_metronome_engine.dart';
 import '../../../core/timing/local_metronome_engine.dart';
 import '../../../core/timing/metronome_engine.dart';
+import '../../../core/timing/native_metronome_engine.dart';
 import '../../../data/settings_repository.dart';
 
 const int kMinBpm = 30;
@@ -34,13 +34,10 @@ class MetronomeController extends ChangeNotifier {
     MetronomeEngine? engine,
   })  : _player = player,
         _settings = settings,
-        // Web doesn't support dart:isolate, so fall back to the same-isolate
-        // engine there. Native platforms use a dedicated isolate so main-thread
-        // stalls don't disturb the beat.
         _engine = engine ??
             (kIsWeb
                 ? LocalMetronomeEngine(onBeat: (_) {})
-                : IsolateMetronomeEngine(onBeat: (_) {})) {
+                : NativeMetronomeEngine(onBeat: (_) {})) {
     _engine.onBeatHandler = _handleBeat;
   }
 
@@ -62,10 +59,23 @@ class MetronomeController extends ChangeNotifier {
     _engine.updateConfig(
       MetronomeConfig(bpm: _bpm, beatsPerBar: _beatsPerBar, pattern: _pattern),
     );
+    if (_engine is NativeMetronomeEngine) {
+      (_engine as NativeMetronomeEngine).setTimbre(_timbre);
+    }
     notifyListeners();
   }
 
   void _handleBeat(BeatEvent event) {
+    if (_engine.handlesAudio) {
+      // Native engine owns audio; only update UI state here.
+      if (event.slotIndex == 0) {
+        _currentBeat = event.beatIndex;
+        notifyListeners();
+      }
+      return;
+    }
+
+    // Dart path (web / test): drive ClickPlayer from the beat callback.
     switch (event.slotType) {
       case SlotType.accent:
         _player.playAccent();
@@ -74,7 +84,6 @@ class MetronomeController extends ChangeNotifier {
       case SlotType.rest:
         break;
     }
-    // Only update the beat indicator on slot 0 of each beat.
     if (event.slotIndex == 0) {
       _currentBeat = event.beatIndex;
       notifyListeners();
@@ -130,6 +139,9 @@ class MetronomeController extends ChangeNotifier {
     if (t.id == _timbre.id) return;
     _timbre = t;
     _player.setTimbre(t);
+    if (_engine is NativeMetronomeEngine) {
+      (_engine as NativeMetronomeEngine).setTimbre(t);
+    }
     _save();
     notifyListeners();
   }

@@ -31,6 +31,11 @@ class ConfigUpdate {
 
 const int _kTickMicros = 2000;
 
+// How far ahead the isolate dispatches events. Must be larger than the
+// worst-case message delivery jitter (~4 ms observed) so the main thread
+// always receives the event before it is due.
+const int _kLookaheadMicros = 20000;
+
 void timerIsolateEntry(TimerInit init) {
   final control = ReceivePort();
   init.toMain.send(control.sendPort);
@@ -50,8 +55,9 @@ void timerIsolateEntry(TimerInit init) {
       beatStartMicros + nextSlotIndex * beatInterval() ~/ patternSlots.length;
 
   void onTick(Timer _) {
-    final now = clock.elapsedMicroseconds;
-    while (now >= nextSlotMicros()) {
+    // Dispatch events that are within the lookahead window.
+    final horizon = clock.elapsedMicroseconds + _kLookaheadMicros;
+    while (horizon >= nextSlotMicros()) {
       final beatIndex = nextBeatIndex;
       final slotIndex = nextSlotIndex;
       final scheduledMicros = nextSlotMicros();
