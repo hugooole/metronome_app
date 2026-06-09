@@ -46,3 +46,6 @@ app.*.map.json
 
 # Codegraph MCP index (local tooling)
 .codegraph/
+
+# Serena local state (local tooling)
+.serena/

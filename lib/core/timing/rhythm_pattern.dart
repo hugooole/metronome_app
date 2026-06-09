@@ -142,12 +142,12 @@ const List<RhythmPattern> kRhythmPresets = [
     slots: [SlotType.accent, SlotType.normal, SlotType.rest, SlotType.rest],
     glyph: 'O',
   ),
-  // two sixteenths + eighth, variant beaming  (short-short-long)
+  // syncopation: 16th + 16th + rest + 16th  (1–2–·–4)
   RhythmPattern(
-    id: 'two16_eighth_alt',
-    name: '双十六八分2',
-    slots: [SlotType.accent, SlotType.normal, SlotType.normal, SlotType.rest],
-    glyph: 'N',
+    id: 'sixteen_sync_alt',
+    name: '切分变型',
+    slots: [SlotType.accent, SlotType.normal, SlotType.rest, SlotType.normal],
+    glyph: 'š',
   ),
 ];
 
