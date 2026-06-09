@@ -6,12 +6,20 @@ A cross-platform metronome practice app built with Flutter, focused on **timing 
 
 - **BPM control**: 30–300, slider + ±1 / ±5 fine adjustment
 - **Time signatures**: 2/4, 3/4, 4/4, 6/8
+- **Rhythm patterns**: 15 subdivision cells (quarter, eighth, sixteenth, triplets, dotted, syncopation)
+- **Multiple timbres**: click and drum kit sounds
 - **Accented downbeat**: the first beat of each bar has a distinct timbre
 - **Tap Tempo**: tap repeatedly to estimate BPM automatically
 - **Visual beat indicator**: highlights the current beat in real time, with the accent emphasized
-- **Settings memory**: restores the last BPM and time signature on launch
+- **Settings memory**: restores the last BPM, time signature, pattern and timbre on launch
 
 ## Design Notes
+
+### Sample-accurate audio on native platforms
+
+On iOS/macOS, audio is handled by `AVAudioEngine` with `playerNode.scheduleBuffer(at: AVAudioTime)` for sample-accurate beat placement — no timer jitter on the audio path.
+
+On Android, a dedicated `AudioTrack` PCM streaming loop writes beats at exact sample positions using 512-frame chunk mixing. This replaces the previous SoLoud approach which lacked timestamp-based scheduling. The Dart event-loop is entirely off the critical audio path on both platforms; beats are scheduled natively and Dart only receives callbacks for UI updates.
 
 ### Drift-free timing
 
@@ -24,32 +32,43 @@ Measured: at 120 BPM over 23 beats, total drift was only -2.31ms with per-beat j
 Timing runs in a dedicated Isolate so the main thread's UI repaints, animations, and GC never interfere with the beat. The timing layer is an abstract interface with two implementations:
 
 - `LocalMetronomeEngine`: same-isolate, uses an injectable clock for precise `fakeAsync` unit tests
-- `IsolateMetronomeEngine`: dedicated Isolate, used in production
+- `IsolateMetronomeEngine`: dedicated Isolate, used in production on web
+- `NativeMetronomeEngine`: delegates to iOS/Android native code; Dart receives beat callbacks via EventChannel
 
 ## Project Structure
 
 ```
 lib/
-├── main.dart                          entry point, dependency injection
+├── main.dart                            entry point, dependency injection
 ├── core/
 │   ├── timing/
-│   │   ├── metronome_engine.dart      abstract interface + BeatEvent/MetronomeConfig
-│   │   ├── local_metronome_engine.dart same-isolate implementation (testable)
-│   │   ├── isolate_metronome_engine.dart Isolate implementation (production)
-│   │   └── timer_isolate.dart         timing core that runs inside the Isolate
-│   └── audio/click_player.dart        SoLoud sound layer
+│   │   ├── metronome_engine.dart        abstract interface + BeatEvent/MetronomeConfig
+│   │   ├── local_metronome_engine.dart  same-isolate implementation (testable)
+│   │   ├── isolate_metronome_engine.dart Isolate implementation (web production)
+│   │   ├── native_metronome_engine.dart  delegates to iOS/Android native
+│   │   ├── timer_isolate.dart           timing core that runs inside the Isolate
+│   │   └── rhythm_pattern.dart          pattern presets + SlotType
+│   └── audio/click_player.dart          SoLoud sound layer (web only)
 ├── features/metronome/
 │   ├── state/
-│   │   ├── metronome_controller.dart  state glue layer (ChangeNotifier)
-│   │   └── tap_tempo.dart             Tap Tempo algorithm
-│   └── ui/                            screens and widgets
-└── data/settings_repository.dart      settings persistence
+│   │   ├── metronome_controller.dart    state glue layer (ChangeNotifier)
+│   │   └── tap_tempo.dart               Tap Tempo algorithm
+│   └── ui/                              screens and widgets
+└── data/settings_repository.dart        settings persistence
+android/app/src/main/kotlin/.../
+├── AudioTrackMetronome.kt               Android PCM streaming engine
+└── MetronomePlugin.kt                   Flutter MethodChannel + EventChannel bridge
+ios/Runner/
+├── SampleAccurateMetronome.swift        iOS AVAudioEngine scheduling
+└── MetronomePlugin.swift                Flutter plugin registration
 ```
 
 ## Tech Stack
 
 - Flutter 3.44.1 / Dart 3.12.1
-- [flutter_soloud](https://pub.dev/packages/flutter_soloud) — low-latency audio
+- [flutter_soloud](https://pub.dev/packages/flutter_soloud) — low-latency audio (web)
+- AVAudioEngine (iOS/macOS) — sample-accurate native scheduling
+- AudioTrack PCM streaming (Android) — sample-accurate native scheduling
 - [shared_preferences](https://pub.dev/packages/shared_preferences) — settings persistence
 - [clock](https://pub.dev/packages/clock) — injectable clock (for tests)
 
