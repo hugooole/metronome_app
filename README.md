@@ -2,6 +2,10 @@
 
 A cross-platform metronome practice app built with Flutter, focused on **timing precision**.
 
+<p align="center">
+  <img src="docs/screenshot.png" alt="Metronome App Screenshot" width="320" />
+</p>
+
 ## Features
 
 - **BPM control**: 30–300, slider + ±1 / ±5 fine adjustment

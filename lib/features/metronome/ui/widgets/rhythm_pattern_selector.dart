@@ -80,7 +80,7 @@ class RhythmPatternSheet extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('节奏型', style: Theme.of(context).textTheme.titleMedium),
+            Text('节 奏 型', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 16),
             Flexible(
               child: RhythmPatternGrid(

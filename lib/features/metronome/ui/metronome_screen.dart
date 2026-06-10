@@ -9,7 +9,15 @@ import 'widgets/rhythm_pattern_selector.dart';
 import 'widgets/timbre_sheet.dart';
 import 'widgets/time_signature_sheet.dart';
 
-/// Metronome main screen — central dial layout (see reference design).
+// ── palette ──────────────────────────────────────────────────────────────────
+const _kAmber = Color(0xFFE8A435);
+const _kAmberDim = Color(0x55E8A435);
+const _kBg = Color(0xFF0D0D0D);
+const _kSurface = Color(0xFF181818);
+const _kText = Color(0xFFDDD5C8);
+const _kTextDim = Color(0x88DDD5C8);
+const _kBorder = Color(0xFF2A2A2A);
+
 class MetronomeScreen extends StatefulWidget {
   final MetronomeController controller;
 
@@ -19,10 +27,37 @@ class MetronomeScreen extends StatefulWidget {
   State<MetronomeScreen> createState() => _MetronomeScreenState();
 }
 
-class _MetronomeScreenState extends State<MetronomeScreen> {
+class _MetronomeScreenState extends State<MetronomeScreen>
+    with SingleTickerProviderStateMixin {
   final _tapTempo = TapTempoCalculator();
+  late final AnimationController _pulseCtrl;
+  int _lastBeat = -1;
 
   MetronomeController get c => widget.controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 120),
+    );
+    c.addListener(_onBeat);
+  }
+
+  void _onBeat() {
+    if (c.currentBeat != _lastBeat && c.currentBeat >= 0) {
+      _lastBeat = c.currentBeat;
+      _pulseCtrl.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    c.removeListener(_onBeat);
+    _pulseCtrl.dispose();
+    super.dispose();
+  }
 
   void _onTap() {
     final bpm = _tapTempo.tap(DateTime.now());
@@ -65,32 +100,42 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _kBg,
       body: AnimatedBuilder(
         animation: c,
         builder: (context, _) {
           return SafeArea(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
                 children: [
-                  const SizedBox(height: 16),
-                  _TopBar(timbreName: c.timbre.name, onTimbre: _openTimbre, onTap: _onTap),
+                  const SizedBox(height: 12),
+                  _TopBar(
+                    timbreName: c.timbre.name,
+                    onTimbre: _openTimbre,
+                    onTap: _onTap,
+                  ),
                   Expanded(
                     child: Center(
-                      child: _Dial(bpm: c.bpm, onChanged: c.setBpm),
+                      child: _Dial(
+                        bpm: c.bpm,
+                        onChanged: c.setBpm,
+                        pulseCtrl: _pulseCtrl,
+                        isPlaying: c.isPlaying,
+                      ),
                     ),
                   ),
-                  _BeatBars(
+                  _BeatDots(
                     beatsPerBar: c.beatsPerBar,
                     currentBeat: c.currentBeat,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
                   _BottomBar(
                     controller: c,
                     onTimeSignature: _openTimeSignature,
                     onRhythm: _openRhythm,
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 28),
                 ],
               ),
             ),
@@ -101,105 +146,66 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
   }
 }
 
-/// A transparent strip of beat bars shown between the dial and the bottom bar.
-///
-/// One rounded vertical bar per beat, styled after a slider/level look: each
-/// bar is filled from the bottom with a flat top edge (a crisp divider line),
-/// the bottom corners hugging the rounded outline via a clip. The downbeat
-/// (beat 0) is filled fully (strong accent) and the others partially (weak), so
-/// the bar's accent structure reads at a glance. The beat currently sounding
-/// lights up in the primary color; the rest stay dim. The background is fully
-/// transparent so it never occludes the dial above it.
-class _BeatBars extends StatefulWidget {
+// ── beat dots ────────────────────────────────────────────────────────────────
+
+class _BeatDots extends StatefulWidget {
   final int beatsPerBar;
-  final int currentBeat; // -1 when stopped/idle
+  final int currentBeat;
 
-  const _BeatBars({required this.beatsPerBar, required this.currentBeat});
-
-  static const double _barWidth = 30;
-  static const double _barHeight = 54;
-  static const double _radius = 8;
+  const _BeatDots({required this.beatsPerBar, required this.currentBeat});
 
   @override
-  State<_BeatBars> createState() => _BeatBarsState();
+  State<_BeatDots> createState() => _BeatDotsState();
 }
 
-class _BeatBarsState extends State<_BeatBars> {
-  int _prevBeat = -1;
+class _BeatDotsState extends State<_BeatDots> {
+  int _prev = -1;
 
   @override
-  void didUpdateWidget(_BeatBars oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.currentBeat != widget.currentBeat) {
-      _prevBeat = oldWidget.currentBeat;
-    }
+  void didUpdateWidget(_BeatDots old) {
+    super.didUpdateWidget(old);
+    if (old.currentBeat != widget.currentBeat) _prev = old.currentBeat;
   }
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return SizedBox(
-      height: _BeatBars._barHeight,
+      height: 32,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: List.generate(widget.beatsPerBar, (i) {
           final isActive = i == widget.currentBeat;
           final isDownbeat = i == 0;
-          final fill = isDownbeat ? 1.0 : 0.36;
-          final fillColor = isActive
-              ? scheme.primary
-              : scheme.onSurface.withValues(alpha: 0.30);
-          final borderRadius = BorderRadius.circular(_BeatBars._radius);
-          // Snap on immediately when a bar becomes active; fade off slowly.
-          final justActivated = isActive && _prevBeat != widget.currentBeat;
-          final duration = justActivated
-              ? Duration.zero
-              : const Duration(milliseconds: 200);
+          final snap = isActive && _prev != widget.currentBeat;
+
           return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            child: SizedBox(
-              width: _BeatBars._barWidth,
-              height: _BeatBars._barHeight,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  ClipRRect(
-                    borderRadius: borderRadius,
-                    child: Align(
-                      alignment: Alignment.bottomCenter,
-                      child: AnimatedContainer(
-                        duration: duration,
-                        curve: Curves.easeOut,
-                        height: _BeatBars._barHeight * fill,
-                        color: fillColor,
-                      ),
-                    ),
-                  ),
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: borderRadius,
-                      border: Border.all(
-                        color: scheme.onSurface.withValues(alpha: 0.22),
-                        width: 1.5,
-                      ),
-                    ),
-                  ),
-                  if (isActive)
-                    IgnorePointer(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          borderRadius: borderRadius,
-                          boxShadow: [
-                            BoxShadow(
-                              color: scheme.primary.withValues(alpha: 0.35),
-                              blurRadius: 12,
-                              spreadRadius: 1,
-                            ),
-                          ],
+            padding: const EdgeInsets.symmetric(horizontal: 7),
+            child: AnimatedContainer(
+              duration:
+                  snap ? Duration.zero : const Duration(milliseconds: 280),
+              curve: Curves.easeOut,
+              width: isActive
+                  ? (isDownbeat ? 22 : 16)
+                  : (isDownbeat ? 13 : 9),
+              height: isActive
+                  ? (isDownbeat ? 22 : 16)
+                  : (isDownbeat ? 13 : 9),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isActive
+                    ? _kAmber
+                    : isDownbeat
+                        ? _kAmberDim
+                        : const Color(0xFF2E2E2E),
+                boxShadow: isActive
+                    ? [
+                        BoxShadow(
+                          color: _kAmber.withValues(alpha: 0.6),
+                          blurRadius: 14,
+                          spreadRadius: 2,
                         ),
-                      ),
-                    ),
-                ],
+                      ]
+                    : null,
               ),
             ),
           );
@@ -209,11 +215,13 @@ class _BeatBarsState extends State<_BeatBars> {
   }
 }
 
-/// Top row: timbre (sound voice) selector on the left, TAP on the right.
+// ── top bar ──────────────────────────────────────────────────────────────────
+
 class _TopBar extends StatelessWidget {
   final String timbreName;
   final VoidCallback onTimbre;
   final VoidCallback onTap;
+
   const _TopBar({
     required this.timbreName,
     required this.onTimbre,
@@ -225,66 +233,77 @@ class _TopBar extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        _PillButton(
-          width: null,
+        _GhostButton(
           onPressed: onTimbre,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.graphic_eq, size: 20),
+              const Icon(Icons.graphic_eq_rounded, size: 15, color: _kTextDim),
               const SizedBox(width: 6),
               Text(
                 timbreName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 14),
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: _kTextDim,
+                  letterSpacing: 1.5,
+                ),
               ),
             ],
           ),
         ),
-        _PillButton(
+        _GhostButton(
           onPressed: onTap,
-          child: const Text('TAP', style: TextStyle(fontSize: 18)),
+          child: const Text(
+            'TAP',
+            style: TextStyle(
+              fontSize: 13,
+              color: _kAmber,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 3,
+            ),
+          ),
         ),
       ],
     );
   }
 }
 
-/// Central circular dial: a knob with a track arc and a draggable handle dot.
-/// Drag the handle (or tap anywhere on the ring) to set the BPM. The big
-/// number, tempo term and label sit in the middle.
+// ── dial ─────────────────────────────────────────────────────────────────────
+
 class _Dial extends StatefulWidget {
   final int bpm;
   final ValueChanged<int> onChanged;
-  const _Dial({required this.bpm, required this.onChanged});
+  final AnimationController pulseCtrl;
+  final bool isPlaying;
+
+  const _Dial({
+    required this.bpm,
+    required this.onChanged,
+    required this.pulseCtrl,
+    required this.isPlaying,
+  });
 
   @override
   State<_Dial> createState() => _DialState();
 }
 
 class _DialState extends State<_Dial> {
-  // The track is an arc with a 60° gap centered at the bottom: it starts at
-  // 120° and sweeps 300° clockwise (canvas angles: 0° = 3 o'clock, +CW).
   static const double _startDeg = 120;
   static const double _sweepDeg = 300;
 
   Offset _center = Offset.zero;
 
-  /// Maps a touch [point] to a BPM by its angle around the dial center.
   void _setFromPoint(Offset point) {
     final v = point - _center;
-    var deg = math.atan2(v.dy, v.dx) * 180 / math.pi; // -180..180, 0 = right
-    if (deg < 0) deg += 360; // 0..360
+    var deg = math.atan2(v.dy, v.dx) * 180 / math.pi;
+    if (deg < 0) deg += 360;
 
-    // Lift onto the track's continuous range [120, 420].
     double t;
     if (deg >= _startDeg) {
-      t = deg; // 120..360
+      t = deg;
     } else if (deg <= _startDeg + _sweepDeg - 360) {
-      t = deg + 360; // 0..60 → 360..420
+      t = deg + 360;
     } else {
-      // In the bottom gap — snap to whichever end is nearer.
       t = (deg < 90) ? _startDeg + _sweepDeg : _startDeg;
     }
 
@@ -295,54 +314,69 @@ class _DialState extends State<_Dial> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = constraints.biggest.shortestSide;
         _center = Offset(size / 2, size / 2);
         final fraction =
-            (widget.bpm - kMinBpm) / (kMaxBpm - kMinBpm);
+            ((widget.bpm - kMinBpm) / (kMaxBpm - kMinBpm)).clamp(0.0, 1.0);
+
         return GestureDetector(
           onTapDown: (d) => _setFromPoint(d.localPosition),
           onPanStart: (d) => _setFromPoint(d.localPosition),
           onPanUpdate: (d) => _setFromPoint(d.localPosition),
-          child: CustomPaint(
-            size: Size(size, size),
-            painter: _DialPainter(
-              fraction: fraction.clamp(0.0, 1.0),
-              startDeg: _startDeg,
-              sweepDeg: _sweepDeg,
-              trackColor: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
-              progressColor: scheme.primary,
-              handleColor: scheme.primary,
-              fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.4),
-            ),
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    tempoTerm(widget.bpm),
-                    style: TextStyle(
-                      fontSize: 22,
-                      color: scheme.onSurface.withValues(alpha: 0.6),
-                    ),
+          child: AnimatedBuilder(
+            animation: widget.pulseCtrl,
+            builder: (context, _) {
+              final pulse = widget.isPlaying
+                  ? (1 - widget.pulseCtrl.value) * 0.15
+                  : 0.0;
+              return CustomPaint(
+                size: Size(size, size),
+                painter: _DialPainter(
+                  fraction: fraction,
+                  startDeg: _startDeg,
+                  sweepDeg: _sweepDeg,
+                  pulseGlow: pulse,
+                ),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        tempoTerm(widget.bpm).toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: _kTextDim,
+                          letterSpacing: 4,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${widget.bpm}',
+                        style: const TextStyle(
+                          fontSize: 88,
+                          fontWeight: FontWeight.w200,
+                          color: _kText,
+                          height: 1.0,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        'BPM',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: _kAmber,
+                          letterSpacing: 5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    '${widget.bpm}',
-                    style: const TextStyle(
-                        fontSize: 80, fontWeight: FontWeight.bold),
-                  ),
-                  Text(
-                    'BPM',
-                    style: TextStyle(
-                      fontSize: 18,
-                      color: scheme.onSurface.withValues(alpha: 0.6),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
         );
       },
@@ -350,86 +384,128 @@ class _DialState extends State<_Dial> {
   }
 }
 
-/// Paints the dial: filled center, track arc, progress arc, and handle dot.
 class _DialPainter extends CustomPainter {
-  final double fraction; // 0..1 position along the track
+  final double fraction;
   final double startDeg;
   final double sweepDeg;
-  final Color trackColor;
-  final Color progressColor;
-  final Color handleColor;
-  final Color fillColor;
+  final double pulseGlow;
 
   _DialPainter({
     required this.fraction,
     required this.startDeg,
     required this.sweepDeg,
-    required this.trackColor,
-    required this.progressColor,
-    required this.handleColor,
-    required this.fillColor,
+    required this.pulseGlow,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    const stroke = 10.0;
-    const handleRadius = 14.0;
-    final radius = size.width / 2 - handleRadius - 2;
-    final rect = Rect.fromCircle(center: center, radius: radius);
+    const handleR = 10.0;
+    const tickCount = 30;
+
+    final outerR = size.width / 2 - handleR - 8;
+    final innerR = outerR - 20;
 
     final startRad = startDeg * math.pi / 180;
     final sweepRad = sweepDeg * math.pi / 180;
 
-    // Filled center.
-    canvas.drawCircle(center, radius - stroke / 2, Paint()..color = fillColor);
+    // filled center
+    canvas.drawCircle(center, innerR - 2, Paint()..color = _kSurface);
 
-    // Track (full arc).
+    // outer glow ring on beat
+    if (pulseGlow > 0) {
+      canvas.drawCircle(
+        center,
+        outerR + 10,
+        Paint()
+          ..color = _kAmber.withValues(alpha: pulseGlow * 0.35)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 20),
+      );
+    }
+
+    // tick marks
+    final tickPaint = Paint()
+      ..color = const Color(0xFF303030)
+      ..strokeWidth = 1
+      ..strokeCap = StrokeCap.round;
+
+    for (int i = 0; i <= tickCount; i++) {
+      final t = i / tickCount;
+      final angle = startRad + sweepRad * t;
+      final isMajor = i % 5 == 0;
+      final len = isMajor ? 10.0 : 5.0;
+      final outer = center +
+          Offset(math.cos(angle), math.sin(angle)) * (innerR - 5);
+      final inner = center +
+          Offset(math.cos(angle), math.sin(angle)) * (innerR - 5 - len);
+      canvas.drawLine(outer, inner, tickPaint);
+    }
+
+    // track arc
+    final trackRect = Rect.fromCircle(center: center, radius: outerR);
     canvas.drawArc(
-      rect,
+      trackRect,
       startRad,
       sweepRad,
       false,
       Paint()
-        ..color = trackColor
+        ..color = const Color(0xFF232323)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = stroke
+        ..strokeWidth = 3
         ..strokeCap = StrokeCap.round,
     );
 
-    // Progress (from start to the handle).
-    canvas.drawArc(
-      rect,
-      startRad,
-      sweepRad * fraction,
-      false,
-      Paint()
-        ..color = progressColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = stroke
-        ..strokeCap = StrokeCap.round,
-    );
+    // progress glow
+    if (fraction > 0) {
+      canvas.drawArc(
+        trackRect,
+        startRad,
+        sweepRad * fraction,
+        false,
+        Paint()
+          ..color = _kAmber.withValues(alpha: 0.22)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 12
+          ..strokeCap = StrokeCap.round
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+      );
+      // progress arc
+      canvas.drawArc(
+        trackRect,
+        startRad,
+        sweepRad * fraction,
+        false,
+        Paint()
+          ..color = _kAmber
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.5
+          ..strokeCap = StrokeCap.round,
+      );
+    }
 
-    // Handle dot at the current position.
-    final handleRad = startRad + sweepRad * fraction;
-    final handle = center +
-        Offset(math.cos(handleRad), math.sin(handleRad)) * radius;
-    canvas.drawCircle(handle, handleRadius, Paint()..color = handleColor);
+    // handle
+    final handleAngle = startRad + sweepRad * fraction;
+    final handlePt =
+        center + Offset(math.cos(handleAngle), math.sin(handleAngle)) * outerR;
+
     canvas.drawCircle(
-      handle,
-      handleRadius - 5,
-      Paint()..color = fillColor,
+      handlePt,
+      handleR + 5,
+      Paint()
+        ..color = _kAmber.withValues(alpha: 0.2)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
     );
+    canvas.drawCircle(handlePt, handleR, Paint()..color = _kAmber);
+    canvas.drawCircle(handlePt, handleR - 4, Paint()..color = _kBg);
   }
 
   @override
   bool shouldRepaint(_DialPainter old) =>
-      old.fraction != fraction ||
-      old.progressColor != progressColor ||
-      old.trackColor != trackColor;
+      old.fraction != fraction || old.pulseGlow != pulseGlow;
 }
 
-/// Bottom row: time-signature button, play/pause, rhythm-pattern button.
+// ── bottom bar ───────────────────────────────────────────────────────────────
+
 class _BottomBar extends StatelessWidget {
   final MetronomeController controller;
   final VoidCallback onTimeSignature;
@@ -446,32 +522,26 @@ class _BottomBar extends StatelessWidget {
     final playing = controller.isPlaying;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        _PillButton(
+        _GhostButton(
           onPressed: onTimeSignature,
           child: Text(
             '${controller.beatsPerBar}/4',
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-          ),
-        ),
-        SizedBox(
-          width: 96,
-          height: 64,
-          child: FilledButton(
-            onPressed: controller.toggle,
-            style: FilledButton.styleFrom(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(32),
-              ),
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w300,
+              color: _kText,
+              letterSpacing: 1,
             ),
-            child: Icon(playing ? Icons.pause : Icons.play_arrow, size: 32),
           ),
         ),
-        _PillButton(
+        _PlayButton(isPlaying: playing, onPressed: controller.toggle),
+        _GhostButton(
           onPressed: onRhythm,
           child: Text(
             controller.pattern.glyph,
-            style: const TextStyle(fontFamily: kMusisync, fontSize: 26),
+            style: const TextStyle(fontFamily: 'Musisync', fontSize: 28),
           ),
         ),
       ],
@@ -479,36 +549,69 @@ class _BottomBar extends StatelessWidget {
   }
 }
 
-/// A rounded pill-shaped button with a translucent background.
-/// [width] fixes the width; when null the button sizes to its content
-/// (with a sensible minimum) and clamps its label to one line.
-class _PillButton extends StatelessWidget {
-  final Widget child;
+class _PlayButton extends StatelessWidget {
+  final bool isPlaying;
   final VoidCallback onPressed;
-  final double? width;
-  const _PillButton({
-    required this.child,
-    required this.onPressed,
-    this.width = 84,
-  });
+
+  const _PlayButton({required this.isPlaying, required this.onPressed});
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return SizedBox(
-      width: width,
-      height: 56,
-      child: TextButton(
-        onPressed: onPressed,
-        style: TextButton.styleFrom(
-          minimumSize: const Size(72, 56),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          backgroundColor: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-          foregroundColor: scheme.onSurface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(28),
+    return GestureDetector(
+      onTap: onPressed,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: 76,
+        height: 76,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isPlaying ? _kAmber : _kSurface,
+          border: Border.all(
+            color: isPlaying ? _kAmber : const Color(0xFF3A3A3A),
+            width: 1.5,
           ),
+          boxShadow: isPlaying
+              ? [
+                  BoxShadow(
+                    color: _kAmber.withValues(alpha: 0.35),
+                    blurRadius: 24,
+                    spreadRadius: 2,
+                  ),
+                ]
+              : null,
         ),
+        child: Icon(
+          isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+          size: 36,
+          color: isPlaying ? _kBg : _kText,
+        ),
+      ),
+    );
+  }
+}
+
+// ── ghost button ─────────────────────────────────────────────────────────────
+
+class _GhostButton extends StatelessWidget {
+  final Widget child;
+  final VoidCallback onPressed;
+
+  const _GhostButton({required this.child, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: Container(
+        height: 48,
+        constraints: const BoxConstraints(minWidth: 72),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: _kSurface,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: _kBorder, width: 1),
+        ),
+        alignment: Alignment.center,
         child: child,
       ),
     );
