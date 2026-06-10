@@ -23,7 +23,7 @@ class TimeSignatureSheet extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('拍号', style: Theme.of(context).textTheme.titleMedium),
+            Text('拍  号', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 16),
             GridView.count(
               crossAxisCount: 4,

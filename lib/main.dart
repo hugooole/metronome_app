@@ -9,7 +9,6 @@ import 'features/metronome/ui/metronome_screen.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Web uses Dart timing + Dart audio; native platforms use native audio.
   final player = kIsWeb ? SoLoudClickPlayer() : NoOpClickPlayer();
 
   final controller = MetronomeController(
@@ -17,8 +16,6 @@ Future<void> main() async {
     settings: PrefsSettingsRepository(),
   );
 
-  // Load audio and last settings; enter the UI even on failure (silent but
-  // still usable for visual practice).
   try {
     await controller.init();
   } catch (e, st) {
@@ -38,11 +35,45 @@ class MetronomeApp extends StatelessWidget {
     return MaterialApp(
       title: '节拍器',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorSchemeSeed: Colors.indigo,
-        useMaterial3: true,
-      ),
+      theme: _buildTheme(),
       home: MetronomeScreen(controller: controller),
+    );
+  }
+
+  ThemeData _buildTheme() {
+    const amber = Color(0xFFE8A435);
+    const bg = Color(0xFF0D0D0D);
+    const surface = Color(0xFF181818);
+    const onSurface = Color(0xFFDDD5C8);
+
+    final cs = ColorScheme.dark(
+      primary: amber,
+      onPrimary: bg,
+      surface: bg,
+      onSurface: onSurface,
+      surfaceContainerHighest: surface,
+      outline: const Color(0xFF2E2E2E),
+    );
+
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: cs,
+      scaffoldBackgroundColor: bg,
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: surface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+      ),
+      textTheme: const TextTheme(
+        titleMedium: TextStyle(
+          color: onSurface,
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 3,
+        ),
+      ),
     );
   }
 }

@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/audio/timbre.dart';
 
-/// Bottom-sheet page for choosing the click timbre (sound voice).
-/// Calls [onSelect] and pops on tap.
 class TimbreSheet extends StatelessWidget {
   final Timbre selected;
   final ValueChanged<Timbre> onSelect;
@@ -23,23 +21,68 @@ class TimbreSheet extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('音色', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
+            Text(
+              '音  色',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 12),
             ...kTimbres.map((t) {
               final isSelected = t.id == selected.id;
-              return ListTile(
-                leading: Icon(
-                  Icons.graphic_eq,
-                  color: isSelected ? scheme.primary : null,
-                ),
-                title: Text(t.name),
-                trailing: isSelected
-                    ? Icon(Icons.check, color: scheme.primary)
-                    : null,
+              return GestureDetector(
                 onTap: () {
                   onSelect(t);
                   Navigator.of(context).pop();
                 },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  margin: const EdgeInsets.symmetric(vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? scheme.primary.withValues(alpha: 0.12)
+                        : scheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isSelected
+                          ? scheme.primary
+                          : scheme.outline,
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.graphic_eq_rounded,
+                        size: 18,
+                        color: isSelected
+                            ? scheme.primary
+                            : scheme.onSurface.withValues(alpha: 0.5),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          t.name,
+                          style: TextStyle(
+                            fontSize: 15,
+                            letterSpacing: 1,
+                            color: isSelected
+                                ? scheme.primary
+                                : scheme.onSurface,
+                          ),
+                        ),
+                      ),
+                      if (isSelected)
+                        Icon(
+                          Icons.check_rounded,
+                          size: 18,
+                          color: scheme.primary,
+                        ),
+                    ],
+                  ),
+                ),
               );
             }),
           ],
