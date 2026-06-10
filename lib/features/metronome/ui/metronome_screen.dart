@@ -110,7 +110,7 @@ class _MetronomeScreenState extends State<MetronomeScreen> {
 /// the bar's accent structure reads at a glance. The beat currently sounding
 /// lights up in the primary color; the rest stay dim. The background is fully
 /// transparent so it never occludes the dial above it.
-class _BeatBars extends StatelessWidget {
+class _BeatBars extends StatefulWidget {
   final int beatsPerBar;
   final int currentBeat; // -1 when stopped/idle
 
@@ -121,44 +121,60 @@ class _BeatBars extends StatelessWidget {
   static const double _radius = 8;
 
   @override
+  State<_BeatBars> createState() => _BeatBarsState();
+}
+
+class _BeatBarsState extends State<_BeatBars> {
+  int _prevBeat = -1;
+
+  @override
+  void didUpdateWidget(_BeatBars oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.currentBeat != widget.currentBeat) {
+      _prevBeat = oldWidget.currentBeat;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return SizedBox(
-      height: _barHeight,
+      height: _BeatBars._barHeight,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
-        children: List.generate(beatsPerBar, (i) {
-          final isActive = i == currentBeat;
+        children: List.generate(widget.beatsPerBar, (i) {
+          final isActive = i == widget.currentBeat;
           final isDownbeat = i == 0;
-          // Fill fraction encodes accent strength: downbeat full, others weak.
           final fill = isDownbeat ? 1.0 : 0.36;
           final fillColor = isActive
               ? scheme.primary
               : scheme.onSurface.withValues(alpha: 0.30);
-          final borderRadius = BorderRadius.circular(_radius);
+          final borderRadius = BorderRadius.circular(_BeatBars._radius);
+          // Snap on immediately when a bar becomes active; fade off slowly.
+          final justActivated = isActive && _prevBeat != widget.currentBeat;
+          final duration = justActivated
+              ? Duration.zero
+              : const Duration(milliseconds: 200);
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6),
             child: SizedBox(
-              width: _barWidth,
-              height: _barHeight,
+              width: _BeatBars._barWidth,
+              height: _BeatBars._barHeight,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // Bottom-anchored fill with a flat top edge; the clip rounds
-                  // its bottom corners to sit flush inside the outline.
                   ClipRRect(
                     borderRadius: borderRadius,
                     child: Align(
                       alignment: Alignment.bottomCenter,
                       child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 130),
+                        duration: duration,
                         curve: Curves.easeOut,
-                        height: _barHeight * fill,
+                        height: _BeatBars._barHeight * fill,
                         color: fillColor,
                       ),
                     ),
                   ),
-                  // Crisp outline on top, always visible.
                   DecoratedBox(
                     decoration: BoxDecoration(
                       borderRadius: borderRadius,
@@ -168,7 +184,6 @@ class _BeatBars extends StatelessWidget {
                       ),
                     ),
                   ),
-                  // Soft glow for the active beat, drawn outside the clip.
                   if (isActive)
                     IgnorePointer(
                       child: DecoratedBox(

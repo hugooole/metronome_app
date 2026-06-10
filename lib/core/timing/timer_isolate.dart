@@ -66,7 +66,7 @@ void timerIsolateEntry(TimerInit init) {
           ? (raw == SlotType.rest ? SlotType.rest : SlotType.accent)
           : (raw == SlotType.accent ? SlotType.normal : raw);
 
-      if (slotType != SlotType.rest) {
+      if (slotType != SlotType.rest || slotIndex == 0) {
         init.toMain.send(<int>[
           beatIndex,
           slotIndex,
