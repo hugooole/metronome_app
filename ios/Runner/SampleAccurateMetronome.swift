@@ -118,6 +118,15 @@ class SampleAccurateMetronome {
                 slotType = raw == 0 ? 1 : raw
             }
 
+            // Always fire UI beat-position callback for slot 0, including rests.
+            if slotIndex == 0 {
+                let delaySecs = max(0.0, Double(sampleTime - now) / Self.sampleRate)
+                let capBeat = beatIndex, capType = slotType
+                DispatchQueue.main.asyncAfter(deadline: .now() + delaySecs) { [weak self] in
+                    self?.onBeat?(["beatIndex": capBeat, "slotIndex": 0, "slotType": capType])
+                }
+            }
+
             if slotType != 2 {
                 scheduleSlot(sampleTime: sampleTime, slotType: slotType,
                              beatIndex: beatIndex, slotIndex: slotIndex)
@@ -149,15 +158,7 @@ class SampleAccurateMetronome {
         guard let buf else { return }
 
         let audioTime = AVAudioTime(sampleTime: sampleTime, atRate: Self.sampleRate)
-        let capBeat = beatIndex, capSlot = slotIndex, capType = slotType
-
-        playerNode.scheduleBuffer(buf, at: audioTime, options: [],
-            completionCallbackType: .dataPlayedBack) { [weak self] _ in
-            guard let self, capSlot == 0 else { return }
-            DispatchQueue.main.async {
-                self.onBeat?(["beatIndex": capBeat, "slotIndex": capSlot, "slotType": capType])
-            }
-        }
+        playerNode.scheduleBuffer(buf, at: audioTime, options: [])
     }
 
     // MARK: - Current player sample position
@@ -198,7 +199,9 @@ class SampleAccurateMetronome {
     // MARK: - Buffer loading
 
     private func loadBuffers(format: AVAudioFormat) throws {
-        let base = Bundle.main.bundlePath + "/flutter_assets/assets/sounds/"
+        // Flutter 3.x bundles assets inside App.framework, not Runner.app directly.
+        let appFrameworkPath = Bundle.main.bundlePath + "/Frameworks/App.framework"
+        let base = appFrameworkPath + "/flutter_assets/assets/sounds/"
         let timbres: [(id: String, accent: String, normal: String?)] = [
             ("click", "click.flac",       nil),
             ("drum",  "drum_accent.flac", "drum_normal.flac"),
@@ -222,8 +225,11 @@ class SampleAccurateMetronome {
 
     private func loadFlac(path: String, targetFormat: AVAudioFormat) -> AVAudioPCMBuffer? {
         let url = URL(fileURLWithPath: path)
-        guard let file = try? AVAudioFile(forReading: url) else {
-            print("[MetronomeAudio] AVAudioFile open failed: \(path)")
+        let file: AVAudioFile
+        do {
+            file = try AVAudioFile(forReading: url)
+        } catch {
+            print("[MetronomeAudio] AVAudioFile open failed: \(path) — \(error)")
             return nil
         }
 

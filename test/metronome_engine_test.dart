@@ -174,7 +174,7 @@ void main() {
       ),
     );
 
-    test('no events fired for mute pattern', () {
+    test('only slot-0 beat-position events fired for mute pattern (no audio slots)', () {
       final events = <BeatEvent>[];
       final engine = LocalMetronomeEngine(
         onBeat: events.add,
@@ -188,7 +188,10 @@ void main() {
         engine.stop();
       });
 
-      expect(events, isEmpty);
+      // Slot-0 events fire so the beat bar advances even for all-rest patterns.
+      expect(events, isNotEmpty);
+      expect(events.every((e) => e.slotIndex == 0), isTrue);
+      expect(events.every((e) => e.slotType == SlotType.rest), isTrue);
     });
   });
 

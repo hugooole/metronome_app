@@ -95,7 +95,7 @@ class LocalMetronomeEngine implements MetronomeEngine {
           ? (raw == SlotType.rest ? SlotType.rest : SlotType.accent)
           : (raw == SlotType.accent ? SlotType.normal : raw);
 
-      if (slotType != SlotType.rest) {
+      if (slotType != SlotType.rest || slotIndex == 0) {
         _onBeat(BeatEvent(
           beatIndex: beatIndex,
           slotIndex: slotIndex,
