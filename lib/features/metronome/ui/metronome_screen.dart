@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/timing/tempo_terms.dart';
 import '../state/metronome_controller.dart';
@@ -288,28 +289,51 @@ class _Dial extends StatefulWidget {
 }
 
 class _DialState extends State<_Dial> {
-  static const double _startDeg = 120;
-  static const double _sweepDeg = 300;
+  static const double _sweepDeg = 360;
 
   Offset _center = Offset.zero;
+  double? _prevAngle;
+  // visual handle position, decoupled from BPM — can exceed [0,1] at boundaries
+  double _visualFraction = 0;
+  bool _dragging = false;
 
-  void _setFromPoint(Offset point) {
+  double _angleFromPoint(Offset point) {
     final v = point - _center;
     var deg = math.atan2(v.dy, v.dx) * 180 / math.pi;
     if (deg < 0) deg += 360;
+    return deg;
+  }
 
-    double t;
-    if (deg >= _startDeg) {
-      t = deg;
-    } else if (deg <= _startDeg + _sweepDeg - 360) {
-      t = deg + 360;
-    } else {
-      t = (deg < 90) ? _startDeg + _sweepDeg : _startDeg;
+  void _handlePanStart(Offset point) {
+    _prevAngle = _angleFromPoint(point);
+    _visualFraction = (widget.bpm - kMinBpm) / (kMaxBpm - kMinBpm);
+    _dragging = true;
+  }
+
+  void _handlePanUpdate(Offset point) {
+    if (_prevAngle == null) return;
+    var delta = _angleFromPoint(point) - _prevAngle!;
+    // Shortest-path wrap to keep delta in (-180, 180]
+    if (delta > 180) delta -= 360;
+    if (delta < -180) delta += 360;
+    _prevAngle = _angleFromPoint(point);
+
+    _visualFraction = (_visualFraction + delta / _sweepDeg).clamp(0.0, 1.0);
+
+    final newBpm = (kMinBpm + _visualFraction * (kMaxBpm - kMinBpm)).round();
+    if (newBpm != widget.bpm) {
+      widget.onChanged(newBpm);
+      HapticFeedback.selectionClick();
+      SystemSound.play(SystemSoundType.click);
     }
+    // repaint even when BPM unchanged (handle still moves visually at boundary)
+    setState(() {});
+  }
 
-    final fraction = ((t - _startDeg) / _sweepDeg).clamp(0.0, 1.0);
-    final bpm = (kMinBpm + fraction * (kMaxBpm - kMinBpm)).round();
-    widget.onChanged(bpm);
+  void _handlePanEnd() {
+    _prevAngle = null;
+    _dragging = false;
+    setState(() {});
   }
 
   @override
@@ -318,25 +342,25 @@ class _DialState extends State<_Dial> {
       builder: (context, constraints) {
         final size = constraints.biggest.shortestSide;
         _center = Offset(size / 2, size / 2);
-        final fraction =
-            ((widget.bpm - kMinBpm) / (kMaxBpm - kMinBpm)).clamp(0.0, 1.0);
+        final fraction = _dragging ? _visualFraction : ((widget.bpm - kMinBpm) / (kMaxBpm - kMinBpm)).clamp(0.0, 1.0);
 
         return GestureDetector(
-          onTapDown: (d) => _setFromPoint(d.localPosition),
-          onPanStart: (d) => _setFromPoint(d.localPosition),
-          onPanUpdate: (d) => _setFromPoint(d.localPosition),
+          onTapDown: (d) => _handlePanStart(d.localPosition),
+          onTapUp: (_) => _handlePanEnd(),
+          onTapCancel: _handlePanEnd,
+          onPanStart: (d) => _handlePanStart(d.localPosition),
+          onPanUpdate: (d) => _handlePanUpdate(d.localPosition),
+          onPanEnd: (_) => _handlePanEnd(),
           child: AnimatedBuilder(
             animation: widget.pulseCtrl,
             builder: (context, _) {
               final pulse = widget.isPlaying
-                  ? (1 - widget.pulseCtrl.value) * 0.15
+                  ? (1 - widget.pulseCtrl.value)
                   : 0.0;
               return CustomPaint(
                 size: Size(size, size),
                 painter: _DialPainter(
                   fraction: fraction,
-                  startDeg: _startDeg,
-                  sweepDeg: _sweepDeg,
                   pulseGlow: pulse,
                 ),
                 child: Center(
@@ -386,14 +410,10 @@ class _DialState extends State<_Dial> {
 
 class _DialPainter extends CustomPainter {
   final double fraction;
-  final double startDeg;
-  final double sweepDeg;
   final double pulseGlow;
 
   _DialPainter({
     required this.fraction,
-    required this.startDeg,
-    required this.sweepDeg,
     required this.pulseGlow,
   });
 
@@ -401,92 +421,66 @@ class _DialPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     const handleR = 10.0;
-    const tickCount = 30;
+    const tickCount = 60;
 
     final outerR = size.width / 2 - handleR - 8;
     final innerR = outerR - 20;
 
-    final startRad = startDeg * math.pi / 180;
-    final sweepRad = sweepDeg * math.pi / 180;
-
     // filled center
     canvas.drawCircle(center, innerR - 2, Paint()..color = _kSurface);
 
-    // outer glow ring on beat
+    // ambient glow on beat — three layers for depth
     if (pulseGlow > 0) {
       canvas.drawCircle(
-        center,
-        outerR + 10,
+        center, outerR + 30,
+        Paint()
+          ..color = _kAmber.withValues(alpha: pulseGlow * 0.15)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 40),
+      );
+      canvas.drawCircle(
+        center, outerR + 12,
         Paint()
           ..color = _kAmber.withValues(alpha: pulseGlow * 0.35)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 20),
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18),
+      );
+      canvas.drawCircle(
+        center, outerR,
+        Paint()
+          ..color = _kAmber.withValues(alpha: pulseGlow * 0.6)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
       );
     }
 
-    // tick marks
+    // tick marks — full 360°
     final tickPaint = Paint()
       ..color = const Color(0xFF303030)
       ..strokeWidth = 1
       ..strokeCap = StrokeCap.round;
 
-    for (int i = 0; i <= tickCount; i++) {
-      final t = i / tickCount;
-      final angle = startRad + sweepRad * t;
+    for (int i = 0; i < tickCount; i++) {
+      final angle = 2 * math.pi * i / tickCount;
       final isMajor = i % 5 == 0;
       final len = isMajor ? 10.0 : 5.0;
-      final outer = center +
-          Offset(math.cos(angle), math.sin(angle)) * (innerR - 5);
-      final inner = center +
-          Offset(math.cos(angle), math.sin(angle)) * (innerR - 5 - len);
+      final outer = center + Offset(math.cos(angle), math.sin(angle)) * (innerR - 5);
+      final inner = center + Offset(math.cos(angle), math.sin(angle)) * (innerR - 5 - len);
       canvas.drawLine(outer, inner, tickPaint);
     }
 
-    // track arc
-    final trackRect = Rect.fromCircle(center: center, radius: outerR);
-    canvas.drawArc(
-      trackRect,
-      startRad,
-      sweepRad,
-      false,
+    // track circle
+    canvas.drawCircle(
+      center,
+      outerR,
       Paint()
         ..color = const Color(0xFF232323)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 3
-        ..strokeCap = StrokeCap.round,
+        ..strokeWidth = 3,
     );
 
-    // progress glow
-    if (fraction > 0) {
-      canvas.drawArc(
-        trackRect,
-        startRad,
-        sweepRad * fraction,
-        false,
-        Paint()
-          ..color = _kAmber.withValues(alpha: 0.22)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 12
-          ..strokeCap = StrokeCap.round
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
-      );
-      // progress arc
-      canvas.drawArc(
-        trackRect,
-        startRad,
-        sweepRad * fraction,
-        false,
-        Paint()
-          ..color = _kAmber
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3.5
-          ..strokeCap = StrokeCap.round,
-      );
-    }
-
-    // handle
-    final handleAngle = startRad + sweepRad * fraction;
-    final handlePt =
-        center + Offset(math.cos(handleAngle), math.sin(handleAngle)) * outerR;
+    // handle — starts at top (-90°), goes clockwise
+    final handleAngle = -math.pi / 2 + 2 * math.pi * fraction;
+    final handlePt = center + Offset(math.cos(handleAngle), math.sin(handleAngle)) * outerR;
 
     canvas.drawCircle(
       handlePt,
