@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/timing/tempo_terms.dart';
 import '../state/metronome_controller.dart';
@@ -322,7 +323,11 @@ class _DialState extends State<_Dial> {
 
     // BPM clamps at boundaries; handle keeps moving
     final newBpm = (kMinBpm + _visualFraction.clamp(0.0, 1.0) * (kMaxBpm - kMinBpm)).round();
-    if (newBpm != widget.bpm) widget.onChanged(newBpm);
+    if (newBpm != widget.bpm) {
+      widget.onChanged(newBpm);
+      HapticFeedback.selectionClick();
+      SystemSound.play(SystemSoundType.click);
+    }
     // repaint even when BPM unchanged (handle still moves visually at boundary)
     setState(() {});
   }
