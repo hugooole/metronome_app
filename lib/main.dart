@@ -36,7 +36,11 @@ class MetronomeApp extends StatelessWidget {
       title: '节拍器',
       debugShowCheckedModeBanner: false,
       theme: _buildTheme(),
-      home: MetronomeScreen(controller: controller),
+      home: MetronomeScreen(
+        controller: controller,
+        player: kIsWeb ? SoLoudClickPlayer() : NoOpClickPlayer(),
+        settings: PrefsSettingsRepository(),
+      ),
     );
   }
 
