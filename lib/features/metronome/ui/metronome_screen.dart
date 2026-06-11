@@ -318,11 +318,9 @@ class _DialState extends State<_Dial> {
     if (delta < -180) delta += 360;
     _prevAngle = _angleFromPoint(point);
 
-    // handle always follows finger 1:1
-    _visualFraction += delta / _sweepDeg;
+    _visualFraction = (_visualFraction + delta / _sweepDeg).clamp(0.0, 1.0);
 
-    // BPM clamps at boundaries; handle keeps moving
-    final newBpm = (kMinBpm + _visualFraction.clamp(0.0, 1.0) * (kMaxBpm - kMinBpm)).round();
+    final newBpm = (kMinBpm + _visualFraction * (kMaxBpm - kMinBpm)).round();
     if (newBpm != widget.bpm) {
       widget.onChanged(newBpm);
       HapticFeedback.selectionClick();
@@ -348,6 +346,8 @@ class _DialState extends State<_Dial> {
 
         return GestureDetector(
           onTapDown: (d) => _handlePanStart(d.localPosition),
+          onTapUp: (_) => _handlePanEnd(),
+          onTapCancel: _handlePanEnd,
           onPanStart: (d) => _handlePanStart(d.localPosition),
           onPanUpdate: (d) => _handlePanUpdate(d.localPosition),
           onPanEnd: (_) => _handlePanEnd(),
