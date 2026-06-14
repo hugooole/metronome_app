@@ -12,12 +12,18 @@ class SampleAccurateMetronome {
     private struct Config {
         var bpm: Int
         var beatsPerBar: Int
-        var patternSlots: [Int]  // SlotType indices: 0=accent, 1=normal, 2=rest
+        // Per-beat slot arrays: patternSlots[beatIndex][slotIndex]
+        var patternSlots: [[Int]]
 
         var samplesPerBeat: AVAudioFramePosition {
             AVAudioFramePosition(44100.0 * 60.0 / Double(bpm))
         }
-        var slotsPerBeat: Int { patternSlots.count }
+        func slotsForBeat(_ beatIndex: Int) -> [Int] {
+            patternSlots[beatIndex % patternSlots.count]
+        }
+        func slotsCountForBeat(_ beatIndex: Int) -> Int {
+            slotsForBeat(beatIndex).count
+        }
     }
 
     static let sampleRate: Double = 44100
@@ -44,7 +50,7 @@ class SampleAccurateMetronome {
 
     // MARK: - Init
 
-    init(bpm: Int, beatsPerBar: Int, patternSlots: [Int]) {
+    init(bpm: Int, beatsPerBar: Int, patternSlots: [[Int]]) {
         config = Config(bpm: bpm, beatsPerBar: beatsPerBar, patternSlots: patternSlots)
     }
 
@@ -79,7 +85,7 @@ class SampleAccurateMetronome {
         engine.stop()
     }
 
-    func updateConfig(bpm: Int, beatsPerBar: Int, patternSlots: [Int]) {
+    func updateConfig(bpm: Int, beatsPerBar: Int, patternSlots: [[Int]]) {
         audioQueue.async { [weak self] in
             guard let self else { return }
             self.config = Config(bpm: bpm, beatsPerBar: beatsPerBar, patternSlots: patternSlots)
@@ -109,7 +115,8 @@ class SampleAccurateMetronome {
             let beatIndex  = nextBeatIndex
             let slotIndex  = nextSlotIndex
             let sampleTime = nextSlotAbsoluteSample()
-            let raw        = config.patternSlots[slotIndex]
+            let slots      = config.slotsForBeat(beatIndex)
+            let raw        = slots[slotIndex]
 
             let slotType: Int
             if beatIndex == 0 && slotIndex == 0 {
@@ -133,7 +140,7 @@ class SampleAccurateMetronome {
             }
 
             nextSlotIndex += 1
-            if nextSlotIndex >= config.slotsPerBeat {
+            if nextSlotIndex >= config.slotsCountForBeat(beatIndex) {
                 nextSlotIndex = 0
                 nextBeatSampleTime += config.samplesPerBeat
                 nextBeatIndex = (nextBeatIndex + 1) % config.beatsPerBar
@@ -143,7 +150,7 @@ class SampleAccurateMetronome {
 
     /// Absolute sample position of the current pending slot.
     private func nextSlotAbsoluteSample() -> AVAudioFramePosition {
-        let n = AVAudioFramePosition(config.slotsPerBeat)
+        let n = AVAudioFramePosition(config.slotsCountForBeat(nextBeatIndex))
         return nextBeatSampleTime + AVAudioFramePosition(nextSlotIndex) * config.samplesPerBeat / n
     }
 

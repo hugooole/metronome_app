@@ -37,7 +37,8 @@ class MetronomePlugin(private val context: Context) {
                     val beatsPerBar = args?.get("beatsPerBar") as? Int ?: 4
                     @Suppress("UNCHECKED_CAST")
                     val patternSlots = (args?.get("patternSlots") as? List<*>)
-                        ?.filterIsInstance<Int>() ?: listOf(0, 1, 1, 1)
+                        ?.map { beat -> (beat as? List<*>)?.filterIsInstance<Int>() ?: listOf(0, 1, 1, 1) }
+                        ?: listOf(listOf(0, 1, 1, 1), listOf(0, 1, 1, 1), listOf(0, 1, 1, 1), listOf(0, 1, 1, 1))
                     val timbreId = args?.get("timbreId") as? String ?: "click"
                     val m = AudioTrackMetronome(context)
                     m.onBeat = { payload ->
@@ -61,7 +62,8 @@ class MetronomePlugin(private val context: Context) {
                     val beatsPerBar = args?.get("beatsPerBar") as? Int ?: 4
                     @Suppress("UNCHECKED_CAST")
                     val patternSlots = (args?.get("patternSlots") as? List<*>)
-                        ?.filterIsInstance<Int>() ?: listOf(0, 1, 1, 1)
+                        ?.map { beat -> (beat as? List<*>)?.filterIsInstance<Int>() ?: listOf(0, 1, 1, 1) }
+                        ?: listOf(listOf(0, 1, 1, 1), listOf(0, 1, 1, 1), listOf(0, 1, 1, 1), listOf(0, 1, 1, 1))
                     metronome?.updateConfig(bpm, beatsPerBar, patternSlots)
                     result.success(null)
                 }

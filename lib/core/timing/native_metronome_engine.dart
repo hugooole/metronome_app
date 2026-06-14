@@ -76,7 +76,9 @@ class NativeMetronomeEngine implements MetronomeEngine {
   Map<String, dynamic> _configArgs() => {
         'bpm': _config.bpm,
         'beatsPerBar': _config.beatsPerBar,
-        'patternSlots': _config.pattern.slots.map((s) => s.index).toList(),
+        'patternSlots': _config.patternSlotsPerBeat
+            .map((beat) => beat.map((s) => s.index).toList())
+            .toList(),
         'timbreId': _timbreId,
       };
 

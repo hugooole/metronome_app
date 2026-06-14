@@ -53,7 +53,7 @@ class MetronomePlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
             guard let args = call.arguments as? [String: Any],
                   let bpm = args["bpm"] as? Int,
                   let beatsPerBar = args["beatsPerBar"] as? Int,
-                  let patternSlots = args["patternSlots"] as? [Int] else {
+                  let patternSlots = args["patternSlots"] as? [[Int]] else {
                 result(FlutterError(code: "BAD_ARGS", message: "start requires bpm/beatsPerBar/patternSlots", details: nil))
                 return
             }
@@ -78,7 +78,7 @@ class MetronomePlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
             guard let args = call.arguments as? [String: Any],
                   let bpm = args["bpm"] as? Int,
                   let beatsPerBar = args["beatsPerBar"] as? Int,
-                  let patternSlots = args["patternSlots"] as? [Int] else {
+                  let patternSlots = args["patternSlots"] as? [[Int]] else {
                 result(FlutterError(code: "BAD_ARGS", message: "updateConfig requires bpm/beatsPerBar/patternSlots", details: nil))
                 return
             }

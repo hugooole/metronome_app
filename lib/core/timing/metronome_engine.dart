@@ -49,10 +49,16 @@ class MetronomeConfig {
   final int beatsPerBar;
   final RhythmPattern pattern;
 
+  /// Per-beat patterns for practice mode. When set, each beat uses the
+  /// corresponding pattern; [pattern] is ignored for audio but kept for
+  /// compatibility with the standard metronome UI.
+  final List<RhythmPattern>? patterns;
+
   const MetronomeConfig({
     this.bpm = 120,
     this.beatsPerBar = 4,
     this.pattern = kDefaultPattern,
+    this.patterns,
   });
 
   /// Duration of one beat in microseconds.
@@ -62,21 +68,31 @@ class MetronomeConfig {
   int get slotsPerBeat => pattern.slots.length;
 
   /// Nominal duration of one subdivision slot in microseconds.
-  ///
-  /// Used only for display/approximation; the engines anchor each slot to the
-  /// beat boundary instead of summing this value, so a beat that does not
-  /// divide evenly (e.g. triplets) accumulates no drift.
   int get slotIntervalMicros => beatIntervalMicros ~/ slotsPerBeat;
+
+  /// Per-beat slot lists. When [patterns] is set, each entry is the slot list
+  /// for that beat; otherwise all beats use [pattern].
+  List<List<SlotType>> get patternSlotsPerBeat {
+    if (patterns != null && patterns!.isNotEmpty) {
+      return List.generate(
+        beatsPerBar,
+        (i) => patterns![i % patterns!.length].slots,
+      );
+    }
+    return List.generate(beatsPerBar, (_) => pattern.slots);
+  }
 
   MetronomeConfig copyWith({
     int? bpm,
     int? beatsPerBar,
     RhythmPattern? pattern,
+    List<RhythmPattern>? patterns,
   }) =>
       MetronomeConfig(
         bpm: bpm ?? this.bpm,
         beatsPerBar: beatsPerBar ?? this.beatsPerBar,
         pattern: pattern ?? this.pattern,
+        patterns: patterns ?? this.patterns,
       );
 }
 

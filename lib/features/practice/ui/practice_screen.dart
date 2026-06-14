@@ -132,22 +132,13 @@ class _PracticeScreenState extends State<PracticeScreen> {
         border: Border(top: BorderSide(color: _kBorder, width: 1)),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           // BPM
           _buildControlButton(
             icon: Icons.speed,
             label: '${_controller.bpm}',
             onTap: _showBpmDialog,
-          ),
-          // Cues
-          _buildControlButton(
-            icon: _controller.showCues
-                ? Icons.lightbulb
-                : Icons.lightbulb_outline,
-            label: '提示',
-            isActive: _controller.showCues,
-            onTap: () => _controller.toggleCues(),
           ),
           // Play/Pause
           GestureDetector(
@@ -188,7 +179,6 @@ class _PracticeScreenState extends State<PracticeScreen> {
             label: '音效',
             onTap: _showTimbreSheet,
           ),
-          const SizedBox(width: 48), // Spacer for balance
         ],
       ),
     );

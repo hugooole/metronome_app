@@ -19,7 +19,6 @@ class PracticeController extends ChangeNotifier {
   int _bpm = 120;
   Timbre _timbre = kDefaultTimbre;
   bool _isPlaying = false;
-  bool _showCues = true;
 
   PracticeGrid _grid = PracticeGrid.initial();
   int _currentBeat = -1;
@@ -40,7 +39,6 @@ class PracticeController extends ChangeNotifier {
   int get bpm => _bpm;
   Timbre get timbre => _timbre;
   bool get isPlaying => _isPlaying;
-  bool get showCues => _showCues;
   PracticeGrid get grid => _grid;
   int get currentBeat => _currentBeat;
 
@@ -50,6 +48,7 @@ class PracticeController extends ChangeNotifier {
 
   void updateColumnPattern(int columnIndex, int patternIndex) {
     _grid = _grid.updateColumn(columnIndex, patternIndex);
+    if (_isPlaying) _updateEngineConfig();
     notifyListeners();
   }
 
@@ -68,11 +67,6 @@ class PracticeController extends ChangeNotifier {
     if (_timbre == t) return;
     _timbre = t;
     _player.setTimbre(t);
-    notifyListeners();
-  }
-
-  void toggleCues() {
-    _showCues = !_showCues;
     notifyListeners();
   }
 
@@ -105,13 +99,11 @@ class PracticeController extends ChangeNotifier {
   }
 
   void _updateEngineConfig() {
-    final currentPattern = _grid.patternForBeat(
-      _currentBeat >= 0 ? _currentBeat : 0,
-    );
     _engine.updateConfig(MetronomeConfig(
       bpm: _bpm,
       beatsPerBar: 4,
-      pattern: currentPattern,
+      pattern: _grid.patternForBeat(0),
+      patterns: List.generate(4, (i) => _grid.patternForBeat(i)),
     ));
   }
 
@@ -121,25 +113,7 @@ class PracticeController extends ChangeNotifier {
     _currentBeat = event.beatIndex;
     _grid = _grid.copyWith(currentBeat: event.beatIndex);
 
-    // Update engine config for the next beat's pattern
-    final nextBeat = (event.beatIndex + 1) % 4;
-    final isLastSlot = event.slotIndex == _grid.patternForBeat(event.beatIndex).slots.length - 1;
-    final isLastBeatOfBar = event.beatIndex == 3;
-
-    if (isLastSlot && isLastBeatOfBar) {
-      // About to loop back to beat 0, update pattern
-      _updateEngineConfig();
-    } else if (isLastSlot) {
-      // About to move to next beat, update pattern
-      final nextPattern = _grid.patternForBeat(nextBeat);
-      _engine.updateConfig(MetronomeConfig(
-        bpm: _bpm,
-        beatsPerBar: 4,
-        pattern: nextPattern,
-      ));
-    }
-
-    if (_showCues && event.slotType != SlotType.rest) {
+    if (!_engine.handlesAudio && event.slotType != SlotType.rest) {
       if (event.slotType == SlotType.accent) {
         _player.playAccent();
       } else {
