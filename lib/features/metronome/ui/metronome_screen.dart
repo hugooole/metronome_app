@@ -3,12 +3,15 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/audio/click_player.dart';
 import '../../../core/timing/tempo_terms.dart';
+import '../../../data/settings_repository.dart';
 import '../state/metronome_controller.dart';
 import '../state/tap_tempo.dart';
 import 'widgets/rhythm_pattern_selector.dart';
 import 'widgets/timbre_sheet.dart';
 import 'widgets/time_signature_sheet.dart';
+import '../../practice/ui/practice_screen.dart';
 
 // ── palette ──────────────────────────────────────────────────────────────────
 const _kAmber = Color(0xFFE8A435);
@@ -21,8 +24,15 @@ const _kBorder = Color(0xFF2A2A2A);
 
 class MetronomeScreen extends StatefulWidget {
   final MetronomeController controller;
+  final ClickPlayer? player;
+  final SettingsRepository? settings;
 
-  const MetronomeScreen({super.key, required this.controller});
+  const MetronomeScreen({
+    super.key,
+    required this.controller,
+    this.player,
+    this.settings,
+  });
 
   @override
   State<MetronomeScreen> createState() => _MetronomeScreenState();
@@ -98,6 +108,27 @@ class _MetronomeScreenState extends State<MetronomeScreen>
     );
   }
 
+  void _openPractice(BuildContext context) {
+    final player = widget.player;
+    final settings = widget.settings;
+
+    if (player == null || settings == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('练习模式不可用')),
+      );
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PracticeScreen(
+          player: player,
+          settings: settings,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -115,6 +146,7 @@ class _MetronomeScreenState extends State<MetronomeScreen>
                     timbreName: c.timbre.name,
                     onTimbre: _openTimbre,
                     onTap: _onTap,
+                    onPractice: () => _openPractice(context),
                   ),
                   Expanded(
                     child: Center(
@@ -222,11 +254,13 @@ class _TopBar extends StatelessWidget {
   final String timbreName;
   final VoidCallback onTimbre;
   final VoidCallback onTap;
+  final VoidCallback onPractice;
 
   const _TopBar({
     required this.timbreName,
     required this.onTimbre,
     required this.onTap,
+    required this.onPractice,
   });
 
   @override
@@ -252,17 +286,30 @@ class _TopBar extends StatelessWidget {
             ],
           ),
         ),
-        _GhostButton(
-          onPressed: onTap,
-          child: const Text(
-            'TAP',
-            style: TextStyle(
-              fontSize: 13,
-              color: _kAmber,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 3,
+        Row(
+          children: [
+            _GhostButton(
+              onPressed: onPractice,
+              child: const Icon(
+                Icons.school_outlined,
+                size: 18,
+                color: _kAmber,
+              ),
             ),
-          ),
+            const SizedBox(width: 8),
+            _GhostButton(
+              onPressed: onTap,
+              child: const Text(
+                'TAP',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: _kAmber,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 3,
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );

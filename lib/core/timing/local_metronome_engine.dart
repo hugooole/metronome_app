@@ -35,8 +35,8 @@ class LocalMetronomeEngine implements MetronomeEngine {
   LocalMetronomeEngine({
     required void Function(BeatEvent event) onBeat,
     MetronomeConfig config = const MetronomeConfig(),
-  })  : _onBeat = onBeat,
-        _config = config;
+  }) : _onBeat = onBeat,
+       _config = config;
 
   @override
   set onBeatHandler(void Function(BeatEvent event) handler) =>
@@ -68,13 +68,31 @@ class LocalMetronomeEngine implements MetronomeEngine {
   @override
   void updateConfig(MetronomeConfig next) {
     _config = next;
-    if (_nextBeatIndex >= next.beatsPerBar) _nextBeatIndex = 0;
+    _normalizePendingSlot();
   }
+
+  List<SlotType> get _nextBeatSlots =>
+      _config.patternSlotsPerBeat[_nextBeatIndex % _config.beatsPerBar];
+
+  int get _nextBeatSlotCount => _nextBeatSlots.length;
 
   int get _nextSlotMicros {
     final beat = _config.beatIntervalMicros;
-    final n = _config.slotsPerBeat;
+    final n = _nextBeatSlotCount;
     return _beatStartMicros + _nextSlotIndex * beat ~/ n;
+  }
+
+  void _normalizePendingSlot() {
+    if (_nextBeatIndex >= _config.beatsPerBar) {
+      _nextBeatIndex = 0;
+      _nextSlotIndex = 0;
+    }
+
+    if (_nextSlotIndex >= _nextBeatSlotCount) {
+      _nextSlotIndex = 0;
+      _beatStartMicros += _config.beatIntervalMicros;
+      _nextBeatIndex = (_nextBeatIndex + 1) % _config.beatsPerBar;
+    }
   }
 
   void _onTick() {
@@ -84,11 +102,13 @@ class LocalMetronomeEngine implements MetronomeEngine {
     final now = clock.now().difference(startTime).inMicroseconds;
     final horizon = now + _lookaheadMicros;
 
+    _normalizePendingSlot();
     while (horizon >= _nextSlotMicros) {
       final beatIndex = _nextBeatIndex;
       final slotIndex = _nextSlotIndex;
       final scheduledMicros = _nextSlotMicros;
-      final raw = _config.pattern.slots[slotIndex];
+      final slots = _nextBeatSlots;
+      final raw = slots[slotIndex];
       // Bar downbeat (beat 0, slot 0): force accent unless the pattern rests it.
       // All other slots: treat pattern's `accent` marker as `normal`.
       final slotType = (beatIndex == 0 && slotIndex == 0)
@@ -96,16 +116,18 @@ class LocalMetronomeEngine implements MetronomeEngine {
           : (raw == SlotType.accent ? SlotType.normal : raw);
 
       if (slotType != SlotType.rest || slotIndex == 0) {
-        _onBeat(BeatEvent(
-          beatIndex: beatIndex,
-          slotIndex: slotIndex,
-          slotType: slotType,
-          scheduledMicros: scheduledMicros,
-        ));
+        _onBeat(
+          BeatEvent(
+            beatIndex: beatIndex,
+            slotIndex: slotIndex,
+            slotType: slotType,
+            scheduledMicros: scheduledMicros,
+          ),
+        );
       }
 
       _nextSlotIndex++;
-      if (_nextSlotIndex >= _config.slotsPerBeat) {
+      if (_nextSlotIndex >= slots.length) {
         _nextSlotIndex = 0;
         // Beat boundary advances by exactly beatIntervalMicros — zero drift.
         _beatStartMicros += _config.beatIntervalMicros;

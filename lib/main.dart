@@ -10,11 +10,9 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   final player = kIsWeb ? SoLoudClickPlayer() : NoOpClickPlayer();
+  final settings = PrefsSettingsRepository();
 
-  final controller = MetronomeController(
-    player: player,
-    settings: PrefsSettingsRepository(),
-  );
+  final controller = MetronomeController(player: player, settings: settings);
 
   try {
     await controller.init();
@@ -22,13 +20,22 @@ Future<void> main() async {
     debugPrint('Metronome init failed: $e\n$st');
   }
 
-  runApp(MetronomeApp(controller: controller));
+  runApp(
+    MetronomeApp(controller: controller, player: player, settings: settings),
+  );
 }
 
 class MetronomeApp extends StatelessWidget {
   final MetronomeController controller;
+  final ClickPlayer player;
+  final SettingsRepository settings;
 
-  const MetronomeApp({super.key, required this.controller});
+  const MetronomeApp({
+    super.key,
+    required this.controller,
+    required this.player,
+    required this.settings,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +43,11 @@ class MetronomeApp extends StatelessWidget {
       title: '节拍器',
       debugShowCheckedModeBanner: false,
       theme: _buildTheme(),
-      home: MetronomeScreen(controller: controller),
+      home: MetronomeScreen(
+        controller: controller,
+        player: player,
+        settings: settings,
+      ),
     );
   }
 

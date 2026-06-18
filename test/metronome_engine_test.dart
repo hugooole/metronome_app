@@ -17,7 +17,8 @@ void main() {
         MetronomeConfig(
           bpm: 120,
           pattern: RhythmPattern(
-            id: 'triplet', name: '三连音',
+            id: 'triplet',
+            name: '三连音',
             slots: [SlotType.accent, SlotType.normal, SlotType.normal],
             glyph: 'T',
           ),
@@ -78,8 +79,11 @@ void main() {
       // quarter pattern fires one slot per beat; intervals must be exactly 500ms.
       for (var i = 1; i < events.length; i++) {
         final delta = events[i].scheduledMicros - events[i - 1].scheduledMicros;
-        expect(delta, 500000,
-            reason: 'beat $i interval should be 500ms, got $delta us');
+        expect(
+          delta,
+          500000,
+          reason: 'beat $i interval should be 500ms, got $delta us',
+        );
       }
       expect(events[19].scheduledMicros, 19 * 500000);
     });
@@ -130,7 +134,12 @@ void main() {
       pattern: RhythmPattern(
         id: 'sixteenth',
         name: '十六分',
-        slots: [SlotType.accent, SlotType.normal, SlotType.normal, SlotType.normal],
+        slots: [
+          SlotType.accent,
+          SlotType.normal,
+          SlotType.normal,
+          SlotType.normal,
+        ],
         glyph: 'y',
       ),
     );
@@ -174,25 +183,28 @@ void main() {
       ),
     );
 
-    test('only slot-0 beat-position events fired for mute pattern (no audio slots)', () {
-      final events = <BeatEvent>[];
-      final engine = LocalMetronomeEngine(
-        onBeat: events.add,
-        config: muteConfig,
-      );
-      addTearDown(engine.dispose);
+    test(
+      'only slot-0 beat-position events fired for mute pattern (no audio slots)',
+      () {
+        final events = <BeatEvent>[];
+        final engine = LocalMetronomeEngine(
+          onBeat: events.add,
+          config: muteConfig,
+        );
+        addTearDown(engine.dispose);
 
-      fakeAsync((async) {
-        engine.start();
-        async.elapse(const Duration(milliseconds: 2100));
-        engine.stop();
-      });
+        fakeAsync((async) {
+          engine.start();
+          async.elapse(const Duration(milliseconds: 2100));
+          engine.stop();
+        });
 
-      // Slot-0 events fire so the beat bar advances even for all-rest patterns.
-      expect(events, isNotEmpty);
-      expect(events.every((e) => e.slotIndex == 0), isTrue);
-      expect(events.every((e) => e.slotType == SlotType.rest), isTrue);
-    });
+        // Slot-0 events fire so the beat bar advances even for all-rest patterns.
+        expect(events, isNotEmpty);
+        expect(events.every((e) => e.slotIndex == 0), isTrue);
+        expect(events.every((e) => e.slotType == SlotType.rest), isTrue);
+      },
+    );
   });
 
   group('MetronomeEngine beat logic (三连音 pattern)', () {
@@ -227,8 +239,14 @@ void main() {
       expect(events[1].slotIndex, 1);
       expect(events[2].slotIndex, 2);
       // Each triplet slot = 500000µs / 3 = 166666µs (beat-anchored, no drift)
-      expect(events[1].scheduledMicros - events[0].scheduledMicros, 500000 ~/ 3);
-      expect(events[2].scheduledMicros - events[0].scheduledMicros, 2 * 500000 ~/ 3);
+      expect(
+        events[1].scheduledMicros - events[0].scheduledMicros,
+        500000 ~/ 3,
+      );
+      expect(
+        events[2].scheduledMicros - events[0].scheduledMicros,
+        2 * 500000 ~/ 3,
+      );
     });
 
     test('beat boundaries are exact — no sub-microsecond drift across 10s', () {
@@ -249,9 +267,101 @@ void main() {
 
       final beatSlot0 = events.where((e) => e.slotIndex == 0).toList();
       for (var i = 0; i < beatSlot0.length; i++) {
-        expect(beatSlot0[i].scheduledMicros, i * 500000,
-            reason: 'beat $i slot 0 should be at ${i * 500000}µs');
+        expect(
+          beatSlot0[i].scheduledMicros,
+          i * 500000,
+          reason: 'beat $i slot 0 should be at ${i * 500000}µs',
+        );
       }
+    });
+  });
+
+  group('MetronomeEngine practice per-beat patterns', () {
+    const quarterPattern = RhythmPattern(
+      id: 'quarter',
+      name: '全拍',
+      slots: [SlotType.accent],
+      glyph: 'q',
+    );
+    const tripletPattern = RhythmPattern(
+      id: 'triplet',
+      name: '三连音',
+      slots: [SlotType.accent, SlotType.normal, SlotType.normal],
+      glyph: 'T',
+    );
+    const sixteenthPattern = RhythmPattern(
+      id: 'sixteenth',
+      name: '十六分',
+      slots: [
+        SlotType.accent,
+        SlotType.normal,
+        SlotType.normal,
+        SlotType.normal,
+      ],
+      glyph: 'y',
+    );
+
+    test('uses the configured pattern for each beat', () {
+      final events = <BeatEvent>[];
+      final engine = LocalMetronomeEngine(
+        onBeat: events.add,
+        config: const MetronomeConfig(
+          bpm: 120,
+          beatsPerBar: 4,
+          pattern: quarterPattern,
+          patterns: [
+            quarterPattern,
+            tripletPattern,
+            quarterPattern,
+            quarterPattern,
+          ],
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      fakeAsync((async) {
+        engine.start();
+        async.elapse(const Duration(milliseconds: 1100));
+        engine.stop();
+      });
+
+      final beatOneEvents = events.where((e) => e.beatIndex == 1).toList();
+      expect(beatOneEvents.map((e) => e.slotIndex), containsAll([0, 1, 2]));
+      expect(beatOneEvents.map((e) => e.scheduledMicros).take(3).toList(), [
+        500000,
+        500000 + 500000 ~/ 3,
+        500000 + 2 * 500000 ~/ 3,
+      ]);
+    });
+
+    test('normalizes pending slot when a running config gets shorter', () {
+      final events = <BeatEvent>[];
+      final engine = LocalMetronomeEngine(
+        onBeat: events.add,
+        config: const MetronomeConfig(
+          bpm: 120,
+          beatsPerBar: 4,
+          pattern: sixteenthPattern,
+        ),
+      );
+      addTearDown(engine.dispose);
+
+      fakeAsync((async) {
+        engine.start();
+        async.elapse(const Duration(milliseconds: 260));
+        engine.updateConfig(
+          const MetronomeConfig(
+            bpm: 120,
+            beatsPerBar: 4,
+            pattern: tripletPattern,
+          ),
+        );
+        async.elapse(const Duration(milliseconds: 700));
+        engine.stop();
+      });
+
+      expect(events, isNotEmpty);
+      expect(events.every((e) => e.slotIndex < 3), isTrue);
     });
   });
 }

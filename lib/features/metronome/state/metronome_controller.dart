@@ -32,12 +32,13 @@ class MetronomeController extends ChangeNotifier {
     required ClickPlayer player,
     required SettingsRepository settings,
     MetronomeEngine? engine,
-  })  : _player = player,
-        _settings = settings,
-        _engine = engine ??
-            (kIsWeb
-                ? LocalMetronomeEngine(onBeat: (_) {})
-                : NativeMetronomeEngine(onBeat: (_) {})) {
+  }) : _player = player,
+       _settings = settings,
+       _engine =
+           engine ??
+           (kIsWeb
+               ? LocalMetronomeEngine(onBeat: (_) {})
+               : NativeMetronomeEngine(onBeat: (_) {})) {
     _engine.onBeatHandler = _handleBeat;
   }
 
@@ -60,7 +61,7 @@ class MetronomeController extends ChangeNotifier {
       MetronomeConfig(bpm: _bpm, beatsPerBar: _beatsPerBar, pattern: _pattern),
     );
     if (_engine is NativeMetronomeEngine) {
-      (_engine as NativeMetronomeEngine).setTimbre(_timbre);
+      _engine.setTimbre(_timbre);
     }
     notifyListeners();
   }
@@ -140,21 +141,24 @@ class MetronomeController extends ChangeNotifier {
     _timbre = t;
     _player.setTimbre(t);
     if (_engine is NativeMetronomeEngine) {
-      (_engine as NativeMetronomeEngine).setTimbre(t);
+      _engine.setTimbre(t);
     }
     _save();
     notifyListeners();
   }
 
-  void _pushConfig() =>
-      _engine.updateConfig(MetronomeConfig(bpm: _bpm, beatsPerBar: _beatsPerBar, pattern: _pattern));
+  void _pushConfig() => _engine.updateConfig(
+    MetronomeConfig(bpm: _bpm, beatsPerBar: _beatsPerBar, pattern: _pattern),
+  );
 
-  void _save() => _settings.save(MetronomeSettings(
-        bpm: _bpm,
-        beatsPerBar: _beatsPerBar,
-        patternId: _pattern.id,
-        timbreId: _timbre.id,
-      ));
+  void _save() => _settings.save(
+    MetronomeSettings(
+      bpm: _bpm,
+      beatsPerBar: _beatsPerBar,
+      patternId: _pattern.id,
+      timbreId: _timbre.id,
+    ),
+  );
 
   @override
   void dispose() {

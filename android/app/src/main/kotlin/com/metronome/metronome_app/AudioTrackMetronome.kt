@@ -24,13 +24,20 @@ class AudioTrackMetronome(private val context: Context) {
     private data class Config(
         val bpm: Int,
         val beatsPerBar: Int,
-        val patternSlots: List<Int>,  // SlotType indices: 0=accent, 1=normal, 2=rest
+        // Per-beat slot arrays: patternSlots[beatIndex][slotIndex]
+        val patternSlots: List<List<Int>>,
     ) {
         val samplesPerBeat: Int get() = SAMPLE_RATE * 60 / bpm
-        val slotsPerBeat: Int get() = patternSlots.size
+        fun slotsForBeat(beatIndex: Int): List<Int> = patternSlots[beatIndex % patternSlots.size]
+        fun slotsCountForBeat(beatIndex: Int): Int = slotsForBeat(beatIndex).size
     }
 
-    @Volatile private var config = Config(120, 4, listOf(0, 1, 1, 1))
+    @Volatile private var config = Config(120, 4, listOf(
+        listOf(0, 1, 1, 1),
+        listOf(0, 1, 1, 1),
+        listOf(0, 1, 1, 1),
+        listOf(0, 1, 1, 1),
+    ))
     @Volatile private var currentTimbreId = "click"
 
     private val accentBuffers = mutableMapOf<String, FloatArray>()
@@ -79,7 +86,7 @@ class AudioTrackMetronome(private val context: Context) {
         track?.release()
     }
 
-    fun updateConfig(bpm: Int, beatsPerBar: Int, patternSlots: List<Int>) {
+    fun updateConfig(bpm: Int, beatsPerBar: Int, patternSlots: List<List<Int>>) {
         config = Config(bpm, beatsPerBar, patternSlots)
     }
 
@@ -109,9 +116,21 @@ class AudioTrackMetronome(private val context: Context) {
             // Queue all slots that start within this chunk.
             val chunkEnd = cursor + chunkSize
             while (true) {
-                val slotFrame = nextBeatFrame + nextSlotIndex.toLong() * snap.samplesPerBeat / snap.slotsPerBeat
+                if (nextBeatIndex >= snap.beatsPerBar) {
+                    nextBeatIndex = 0
+                    nextSlotIndex = 0
+                }
+                var slotsPerBeat = snap.slotsCountForBeat(nextBeatIndex)
+                if (nextSlotIndex >= slotsPerBeat) {
+                    nextSlotIndex = 0
+                    nextBeatFrame += snap.samplesPerBeat
+                    nextBeatIndex = (nextBeatIndex + 1) % snap.beatsPerBar
+                    slotsPerBeat = snap.slotsCountForBeat(nextBeatIndex)
+                }
+                val slotFrame = nextBeatFrame + nextSlotIndex.toLong() * snap.samplesPerBeat / slotsPerBeat
                 if (slotFrame >= chunkEnd) break
-                val raw = snap.patternSlots[nextSlotIndex]
+                val slots = snap.slotsForBeat(nextBeatIndex)
+                val raw = slots[nextSlotIndex]
                 val slotType = when {
                     nextBeatIndex == 0 && nextSlotIndex == 0 -> if (raw == 2) 2 else 0
                     raw == 0 -> 1
@@ -142,7 +161,7 @@ class AudioTrackMetronome(private val context: Context) {
                     })
                 }
                 nextSlotIndex++
-                if (nextSlotIndex >= snap.slotsPerBeat) {
+                if (nextSlotIndex >= slotsPerBeat) {
                     nextSlotIndex = 0
                     nextBeatFrame += snap.samplesPerBeat
                     nextBeatIndex = (nextBeatIndex + 1) % snap.beatsPerBar
