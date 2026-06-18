@@ -6,6 +6,8 @@
 /// critical audio path.
 library;
 
+// ignore_for_file: prefer_initializing_formals
+
 import 'dart:async';
 
 import 'package:flutter/services.dart';
@@ -26,11 +28,12 @@ class NativeMetronomeEngine implements MetronomeEngine {
   NativeMetronomeEngine({
     required void Function(BeatEvent event) onBeat,
     MetronomeConfig config = const MetronomeConfig(),
-  })  : _onBeat = onBeat,
-        _config = config;
+  }) : _onBeat = onBeat,
+       _config = config;
 
   @override
-  set onBeatHandler(void Function(BeatEvent event) handler) => _onBeat = handler;
+  set onBeatHandler(void Function(BeatEvent event) handler) =>
+      _onBeat = handler;
 
   @override
   bool get isRunning => _running;
@@ -74,24 +77,26 @@ class NativeMetronomeEngine implements MetronomeEngine {
   void dispose() => stop();
 
   Map<String, dynamic> _configArgs() => {
-        'bpm': _config.bpm,
-        'beatsPerBar': _config.beatsPerBar,
-        'patternSlots': _config.patternSlotsPerBeat
-            .map((beat) => beat.map((s) => s.index).toList())
-            .toList(),
-        'timbreId': _timbreId,
-      };
+    'bpm': _config.bpm,
+    'beatsPerBar': _config.beatsPerBar,
+    'patternSlots': _config.patternSlotsPerBeat
+        .map((beat) => beat.map((s) => s.index).toList())
+        .toList(),
+    'timbreId': _timbreId,
+  };
 
   void _onNativeBeat(dynamic raw) {
     final map = (raw as Map).cast<String, dynamic>();
     final beatIndex = map['beatIndex'] as int;
     final slotIndex = map['slotIndex'] as int;
     final slotType = SlotType.values[map['slotType'] as int];
-    _onBeat(BeatEvent(
-      beatIndex: beatIndex,
-      slotIndex: slotIndex,
-      slotType: slotType,
-      scheduledMicros: 0,
-    ));
+    _onBeat(
+      BeatEvent(
+        beatIndex: beatIndex,
+        slotIndex: slotIndex,
+        slotType: slotType,
+        scheduledMicros: 0,
+      ),
+    );
   }
 }

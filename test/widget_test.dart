@@ -27,16 +27,22 @@ class _FakeSettings implements SettingsRepository {
 }
 
 void main() {
-  testWidgets('main screen shows BPM and toggles play/pause icon',
-      (tester) async {
-    final controller = MetronomeController(
-      player: _FakePlayer(),
-      settings: _FakeSettings(),
-    );
+  testWidgets('main screen shows BPM and toggles play/pause icon', (
+    tester,
+  ) async {
+    final player = _FakePlayer();
+    final settings = _FakeSettings();
+    final controller = MetronomeController(player: player, settings: settings);
     addTearDown(controller.dispose);
 
     await tester.pumpWidget(
-      MaterialApp(home: MetronomeScreen(controller: controller)),
+      MaterialApp(
+        home: MetronomeScreen(
+          controller: controller,
+          player: player,
+          settings: settings,
+        ),
+      ),
     );
 
     // Default 120 BPM and the dial are shown.
@@ -46,10 +52,10 @@ void main() {
     expect(find.text('4/4'), findsOneWidget);
 
     // Initially shows the play icon; tapping it switches to pause.
-    expect(find.byIcon(Icons.play_arrow), findsOneWidget);
-    await tester.tap(find.byIcon(Icons.play_arrow));
+    expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.play_arrow_rounded));
     await tester.pump();
-    expect(find.byIcon(Icons.pause), findsOneWidget);
+    expect(find.byIcon(Icons.pause_rounded), findsOneWidget);
 
     controller.stop();
   });

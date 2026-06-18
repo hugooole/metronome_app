@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+// ignore_for_file: prefer_initializing_formals
+
 import '../../../core/audio/click_player.dart';
 import '../../../core/audio/timbre.dart';
 import '../../../core/timing/local_metronome_engine.dart';
@@ -14,7 +16,6 @@ const int kMaxBpm = 300;
 class PracticeController extends ChangeNotifier {
   final MetronomeEngine _engine;
   final ClickPlayer _player;
-  final SettingsRepository _settings;
 
   int _bpm = 120;
   Timbre _timbre = kDefaultTimbre;
@@ -27,12 +28,12 @@ class PracticeController extends ChangeNotifier {
     required ClickPlayer player,
     required SettingsRepository settings,
     MetronomeEngine? engine,
-  })  : _player = player,
-        _settings = settings,
-        _engine = engine ??
-            (kIsWeb
-                ? LocalMetronomeEngine(onBeat: (_) {})
-                : NativeMetronomeEngine(onBeat: (_) {})) {
+  }) : _player = player,
+       _engine =
+           engine ??
+           (kIsWeb
+               ? LocalMetronomeEngine(onBeat: (_) {})
+               : NativeMetronomeEngine(onBeat: (_) {})) {
     _engine.onBeatHandler = _handleBeat;
   }
 
@@ -99,12 +100,14 @@ class PracticeController extends ChangeNotifier {
   }
 
   void _updateEngineConfig() {
-    _engine.updateConfig(MetronomeConfig(
-      bpm: _bpm,
-      beatsPerBar: 4,
-      pattern: _grid.patternForBeat(0),
-      patterns: List.generate(4, (i) => _grid.patternForBeat(i)),
-    ));
+    _engine.updateConfig(
+      MetronomeConfig(
+        bpm: _bpm,
+        beatsPerBar: 4,
+        pattern: _grid.patternForBeat(0),
+        patterns: List.generate(4, (i) => _grid.patternForBeat(i)),
+      ),
+    );
   }
 
   void _handleBeat(BeatEvent event) {
@@ -127,6 +130,7 @@ class PracticeController extends ChangeNotifier {
   @override
   void dispose() {
     stop();
+    _engine.dispose();
     super.dispose();
   }
 }

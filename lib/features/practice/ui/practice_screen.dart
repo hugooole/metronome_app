@@ -48,12 +48,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
   @override
   void dispose() {
     // Restore portrait orientation when leaving
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     _controller.dispose();
     super.dispose();
   }
@@ -81,10 +76,11 @@ class _PracticeScreenState extends State<PracticeScreen> {
                   child: RhythmGridPicker(
                     selectedIndices: selectedIndices,
                     currentBeat: grid.currentBeat,
-                    onColumnChanged: (encoded) {
-                      final columnIndex = encoded ~/ 100;
-                      final patternIndex = encoded % 100;
-                      _controller.updateColumnPattern(columnIndex, patternIndex);
+                    onColumnChanged: (columnIndex, patternIndex) {
+                      _controller.updateColumnPattern(
+                        columnIndex,
+                        patternIndex,
+                      );
                     },
                   ),
                 ),
@@ -157,7 +153,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
                 boxShadow: _controller.isPlaying
                     ? [
                         BoxShadow(
-                          color: _kAmber.withOpacity(0.4),
+                          color: _kAmber.withValues(alpha: 0.4),
                           blurRadius: 12,
                           spreadRadius: 2,
                         ),
@@ -195,17 +191,13 @@ class _PracticeScreenState extends State<PracticeScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: isActive ? _kAmber.withOpacity(0.2) : Colors.transparent,
+          color: isActive ? _kAmber.withValues(alpha: 0.2) : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              color: isActive ? _kAmber : _kText,
-              size: 20,
-            ),
+            Icon(icon, color: isActive ? _kAmber : _kText, size: 20),
             const SizedBox(height: 2),
             Text(
               label,
@@ -246,7 +238,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
                   max: 300,
                   divisions: 270,
                   activeColor: _kAmber,
-                  inactiveColor: _kAmber.withOpacity(0.3),
+                  inactiveColor: _kAmber.withValues(alpha: 0.3),
                   onChanged: (value) {
                     setState(() {
                       _controller.setBpm(value.round());
@@ -289,10 +281,7 @@ class _PracticeTimbreSheet extends StatelessWidget {
   final Timbre selected;
   final ValueChanged<Timbre> onSelect;
 
-  const _PracticeTimbreSheet({
-    required this.selected,
-    required this.onSelect,
-  });
+  const _PracticeTimbreSheet({required this.selected, required this.onSelect});
 
   @override
   Widget build(BuildContext context) {
@@ -303,10 +292,7 @@ class _PracticeTimbreSheet extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              '音  色',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            Text('音  色', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
             ...kTimbres.map((t) {
               final isSelected = t.id == selected.id;
