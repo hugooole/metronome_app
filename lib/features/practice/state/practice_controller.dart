@@ -68,6 +68,9 @@ class PracticeController extends ChangeNotifier {
     if (_timbre == t) return;
     _timbre = t;
     _player.setTimbre(t);
+    if (_engine is NativeMetronomeEngine) {
+      _engine.setTimbre(t);
+    }
     notifyListeners();
   }
 

@@ -89,7 +89,7 @@ class SampleAccurateMetronome {
         audioQueue.async { [weak self] in
             guard let self else { return }
             self.config = Config(bpm: bpm, beatsPerBar: beatsPerBar, patternSlots: patternSlots)
-            if self.nextBeatIndex >= beatsPerBar { self.nextBeatIndex = 0 }
+            self.normalizePendingSlot()
         }
     }
 
@@ -111,6 +111,7 @@ class SampleAccurateMetronome {
         let now = playerSampleNow()
         let horizon = now + Self.lookaheadSamples
 
+        normalizePendingSlot()
         while nextSlotAbsoluteSample() <= horizon {
             let beatIndex  = nextBeatIndex
             let slotIndex  = nextSlotIndex
@@ -145,6 +146,20 @@ class SampleAccurateMetronome {
                 nextBeatSampleTime += config.samplesPerBeat
                 nextBeatIndex = (nextBeatIndex + 1) % config.beatsPerBar
             }
+        }
+    }
+
+    private func normalizePendingSlot() {
+        if nextBeatIndex >= config.beatsPerBar {
+            nextBeatIndex = 0
+            nextSlotIndex = 0
+        }
+
+        let slotsCount = config.slotsCountForBeat(nextBeatIndex)
+        if nextSlotIndex >= slotsCount {
+            nextSlotIndex = 0
+            nextBeatSampleTime += config.samplesPerBeat
+            nextBeatIndex = (nextBeatIndex + 1) % config.beatsPerBar
         }
     }
 
